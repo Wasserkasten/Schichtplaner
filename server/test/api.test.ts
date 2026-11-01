@@ -115,3 +115,20 @@ describe('Feiertage', () => {
     expect(sn.find((h) => h.name === 'Buß- und Bettag')?.date).toBe('2026-11-18');
   });
 });
+
+describe('Backup', () => {
+  it('behält nur die neuesten N Sicherungen', async () => {
+    const { mkdtempSync, readdirSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { rotatingBackup } = await import('../src/backup.js');
+    const dir = mkdtempSync(join(tmpdir(), 'sp-backup-'));
+    for (const d of ['20260101', '20260102', '20260103']) writeFileSync(join(dir, `schichtplaner-${d}-000000.db`), '');
+    writeFileSync(join(dir, 'fremd.txt'), '');
+    await rotatingBackup(db, dir, 2);
+    const files = readdirSync(dir).sort();
+    expect(files).toHaveLength(3); // 2 Sicherungen + fremde Datei bleibt
+    expect(files).toContain('fremd.txt');
+    expect(files).not.toContain('schichtplaner-20260102-000000.db');
+  });
+});

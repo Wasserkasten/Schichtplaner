@@ -4,9 +4,10 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY server/package.json server/
 COPY web/package.json web/
-RUN npm ci
+# better-sqlite3 bringt fertige Binärdateien für Linux x64/ARM64 mit – kein Compiler nötig
+RUN npm ci --ignore-scripts
 COPY . .
-RUN npm run build && npm prune --omit=dev
+RUN npm run build && npm prune --omit=dev --ignore-scripts
 
 # --- Laufzeit ---
 FROM node:22-bookworm-slim

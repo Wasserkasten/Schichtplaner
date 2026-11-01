@@ -1,22 +1,41 @@
-# Produktivbetrieb: Caddy holt automatisch ein HTTPS-Zertifikat für DOMAIN.
-#   DOMAIN=plan.example.de ADMIN_PASSWORD=... docker compose up -d
+# Installation: siehe docs/INSTALLATION.md
+#   cp .env.example .env   # DOMAIN usw. eintragen
+#   docker compose up -d --build
 services:
   app:
     build: .
+    image: schichtplaner:latest
     restart: unless-stopped
     environment:
-      SECURE_COOKIES: "true"
+      TZ: Europe/Berlin
+      SECURE_COOKIES: "${SECURE_COOKIES:-true}"
+      TRUST_PROXY: "${TRUST_PROXY:-true}"
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      BACKUP_DIR: /data/backups
+      BACKUP_KEEP: "${BACKUP_KEEP:-14}"
+    ports:
+      - "${APP_BIND:-127.0.0.1:3000}:3000"
     volumes:
       - data:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      options: { max-size: "10m", max-file: "3" }
 
   caddy:
     image: caddy:2
+    profiles: ["caddy"]
     restart: unless-stopped
-    ports: ["80:80", "443:443"]
-    command: caddy reverse-proxy --from ${DOMAIN:?DOMAIN setzen} --to app:3000
+    depends_on: [app]
+    ports: ["80:80", "443:443", "443:443/udp"]
+    command: caddy reverse-proxy --from ${DOMAIN:-localhost} --to app:3000
     volumes:
       - caddy:/data
+    logging:
+      options: { max-size: "10m", max-file: "3" }
 
 volumes:
   data:

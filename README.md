@@ -3,7 +3,7 @@
 Web-App für Dienst- und Abwesenheitsplanung mehrerer Abteilungen und Teams – mit persönlichen Konten,
 granularen Rechten, Änderungsprotokoll und Live-Aktualisierung bei gleichzeitiger Bearbeitung.
 
-Konzept, Rechtemodell und Fahrplan: **[docs/KONZEPT.md](docs/KONZEPT.md)**
+Konzept, Rechtemodell und Fahrplan: **[docs/KONZEPT.md](docs/KONZEPT.md)** · Installation: **[docs/INSTALLATION.md](docs/INSTALLATION.md)**
 
 ## Funktionen
 
@@ -19,47 +19,32 @@ Konzept, Rechtemodell und Fahrplan: **[docs/KONZEPT.md](docs/KONZEPT.md)**
 - **Mehrbenutzer**: Live-Updates (Server-Sent Events) und Konflikterkennung.
 - **PWA**: auf Handy und PC installierbar, responsives Layout.
 
-## Entwicklung
+## Installation
 
-Voraussetzung: Node.js 22+
-
-```bash
-npm install
-npm run seed            # Demodaten: Benutzer admin / anna / ben, Passwort "demo1234"
-npm run dev             # Server :3000 + Vite-Dev-Server :5173 → http://localhost:5173
-npm test                # API-Tests (Rechte, Konflikte, Pinsel, Feiertage)
-npm run typecheck
-```
-
-Ohne Demodaten legt der Server beim ersten Start den Benutzer `admin` an und gibt das Passwort im Log aus
-(oder nimmt `ADMIN_PASSWORD`).
-
-## Betrieb
+**Empfohlen für den Betrieb: Docker** – App und automatisches HTTPS (Caddy) mit einem Befehl, tägliche Backups inklusive:
 
 ```bash
-npm run build && npm start          # liefert API + gebaute Oberfläche auf Port 3000 aus
+git clone https://github.com/wasserkasten/schichtplaner.git && cd schichtplaner
+cp .env.example .env      # DOMAIN und ADMIN_PASSWORD eintragen
+docker compose up -d --build
 ```
 
-oder mit Docker inkl. automatischem HTTPS über Caddy:
+**Zum Ausprobieren und Entwickeln: npm** (Node.js 22):
 
 ```bash
-DOMAIN=plan.example.de ADMIN_PASSWORD='…' docker compose up -d
+npm ci
+npm run seed              # optional: Demodaten, Logins admin / anna / ben, Passwort "demo1234"
+npm run dev               # → http://localhost:5173
 ```
 
-| Variable | Bedeutung | Standard |
-|---|---|---|
-| `PORT` | HTTP-Port | `3000` |
-| `DB_FILE` | Pfad der SQLite-Datenbank | `server/data/schichtplaner.db` |
-| `STATIC_DIR` | gebaute Oberfläche | `web/dist` |
-| `SECURE_COOKIES` | `true` hinter HTTPS | `false` |
-| `ADMIN_PASSWORD` | Passwort des ersten Admins | zufällig, im Log |
-
-Backup: die Datei `schichtplaner.db` sichern (im laufenden Betrieb z. B. mit `sqlite3 schichtplaner.db ".backup backup.db"`).
+➡️ **Ausführliche Anleitung** (Server vorbereiten, Ersteinrichtung, Rechte, Backups, Updates, nginx, systemd,
+Fehlerbehebung): **[docs/INSTALLATION.md](docs/INSTALLATION.md)**
 
 ## Aufbau
 
 ```
-server/   Fastify-API, SQLite-Schema (src/schema.sql), Rechte (src/permissions.ts), Tests
+server/   Fastify-API, SQLite-Schema (src/schema.sql), Rechte (src/permissions.ts),
+          Kommandozeilenwerkzeug (src/cli.ts), Tests
 web/      React-Oberfläche (src/views: Kalender, Tag, Jahr, Verwaltung), PWA-Konfiguration
 docs/     Konzept
 ```

@@ -53,9 +53,10 @@ export async function buildApp(opts: {
   db: DB;
   staticDir?: string;
   secureCookies?: boolean;
+  trustProxy?: boolean;
   logger?: boolean;
 }): Promise<{ app: FastifyInstance; ctx: AppContext }> {
-  const app = Fastify({ logger: opts.logger ?? false, trustProxy: true });
+  const app = Fastify({ logger: opts.logger ?? false, trustProxy: opts.trustProxy ?? true, forceCloseConnections: true });
   const ctx: AppContext = { db: opts.db, hub: new RealtimeHub(opts.db), secureCookies: !!opts.secureCookies };
 
   await app.register(cookie);
