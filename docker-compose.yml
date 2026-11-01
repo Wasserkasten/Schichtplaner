@@ -1,0 +1,23 @@
+# Produktivbetrieb: Caddy holt automatisch ein HTTPS-Zertifikat für DOMAIN.
+#   DOMAIN=plan.example.de ADMIN_PASSWORD=... docker compose up -d
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      SECURE_COOKIES: "true"
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    volumes:
+      - data:/data
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    command: caddy reverse-proxy --from ${DOMAIN:?DOMAIN setzen} --to app:3000
+    volumes:
+      - caddy:/data
+
+volumes:
+  data:
+  caddy:
