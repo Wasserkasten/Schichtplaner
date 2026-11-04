@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react';
 import type { NavState } from '../App';
 import { store, useStore } from '../store';
 import { MONTHS, WEEKDAYS, daysInMonth, isWeekend, iso, today, weekday } from '../dates';
-import { fullName, reportError, typeMap } from '../helpers';
+import { fullName, reportError, sortedTeams, teamLabel, typeMap } from '../helpers';
 import { EntryChip } from '../components/EntryChip';
 import { CellEditor } from '../components/CellEditor';
-import { dayClass } from './MonthView';
+import { CellContent, dayClass, holidayTitle } from './MonthView';
 
 /** Jahreskalender pro Mitarbeiter: 12 Zeilen (Monate) × 31 Spalten (Tage) plus Auswertung. */
 export function YearView({ nav, setNav }: { nav: NavState; setNav: (n: NavState) => void }) {
@@ -39,7 +39,8 @@ export function YearView({ nav, setNav }: { nav: NavState; setNav: (n: NavState)
     }
   }
 
-  const teams = boot.teams;
+  const teams = sortedTeams(boot, (tm) => boot.employees.some((e) => e.teamId === tm.id && e.active));
+  const teamSize = boot.employees.filter((e) => e.teamId === emp.teamId && e.active).length;
   return (
     <div className="year">
       <div className="toolbar">
@@ -49,7 +50,7 @@ export function YearView({ nav, setNav }: { nav: NavState; setNav: (n: NavState)
         <h1>{year}</h1>
         <select value={emp.id} onChange={(e) => setNav({ ...nav, employeeId: Number(e.target.value) })}>
           {teams.map((tm) => (
-            <optgroup key={tm.id} label={tm.name}>
+            <optgroup key={tm.id} label={teamLabel(boot, tm.id)}>
               {boot.employees
                 .filter((e) => e.teamId === tm.id && e.active)
                 .map((e) => (
@@ -58,10 +59,30 @@ export function YearView({ nav, setNav }: { nav: NavState; setNav: (n: NavState)
             </optgroup>
           ))}
         </select>
+        <div className="spacer" />
+        <button onClick={() => window.print()} title="Jahresübersicht drucken (A4 quer). Im Druckdialog kann auch „Als PDF speichern“ gewählt werden.">🖨 Drucken</button>
+        <a className="button" href={`/api/pdf/year?year=${year}&employeeId=${emp.id}`} download title="Jahresübersicht als PDF-Datei herunterladen">
+          ⬇ PDF
+        </a>
+        {teamSize > 1 && (
+          <a className="button" href={`/api/pdf/year?year=${year}&teamId=${emp.teamId}`} download title={`PDF mit einer Seite je Mitarbeiter (${teamSize}) aus ${teamLabel(boot, emp.teamId)}`}>
+            ⬇ PDF ganzes Team
+          </a>
+        )}
+      </div>
+      <div className="print-only print-head">
+        <h1>Jahresübersicht {year}</h1>
+        <div>
+          <strong>{fullName(emp)}</strong> · {teamLabel(boot, emp.teamId)}
+        </div>
       </div>
 
       <div className="grid-wrap">
-        <table className="plan yeargrid">
+        <table className="plan fixed yeargrid" style={{ minWidth: `${7 + 31 * 2.15}rem` }}>
+          <colgroup>
+            <col className="namecol" />
+            {Array.from({ length: 31 }, (_, i) => <col key={i} />)}
+          </colgroup>
           <thead>
             <tr>
               <th className="sticky-col">Monat</th>
@@ -77,8 +98,8 @@ export function YearView({ nav, setNav }: { nav: NavState; setNav: (n: NavState)
                   const date = iso(new Date(Date.UTC(year, m, i + 1)));
                   const h = st.holidayOn(date);
                   return (
-                    <td key={i} className={`${dayClass(date, t, !!h)} cell editable`} title={`${WEEKDAYS[weekday(date)]} ${h ? '· ' + h.name : ''}`} onClick={() => setEditing(date)}>
-                      {st.cell(emp.id, date).map((e) => <EntryChip key={e.id} e={e} types={types} />)}
+                    <td key={i} className={`${dayClass(date, t, h)} cell editable`} title={`${WEEKDAYS[weekday(date)]}${h ? ' · ' + holidayTitle(h) : ''}`} onClick={() => setEditing(date)}>
+                      <CellContent entries={st.cell(emp.id, date)} types={types} />
                     </td>
                   );
                 })}

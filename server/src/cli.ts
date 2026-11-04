@@ -4,8 +4,11 @@
  *   node server/dist/cli.js backup <zieldatei>
  *   node server/dist/cli.js restore <sicherung>     (nur bei gestopptem Server!)
  *   node server/dist/cli.js reset-password <benutzer> [neues-passwort]
+ *   node server/dist/cli.js password-link <benutzer>   Link zum Zurücksetzen (PUBLIC_URL = Adresse der App)
  *   node server/dist/cli.js create-admin <benutzer> [passwort]
  *   node server/dist/cli.js list-users
+ *   node server/dist/cli.js demo              Beispieldaten einfügen
+ *   node server/dist/cli.js demo-remove       Beispieldaten wieder entfernen
  *
  * Die Datenbank wird über DB_FILE gefunden (wie beim Server).
  */
@@ -18,6 +21,8 @@ import { openDb } from './db.js';
 import { hashPassword } from './auth.js';
 import { backupTo } from './backup.js';
 import { ensureEntryTypes } from './seed-lib.js';
+import { LINK_DAYS, SECRET_LABEL, createPasswordLink } from './password-links.js';
+import { DEMO_PASSWORD, DemoError, insertDemoData, removeDemoData, type DemoSummary } from './demo.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const dbFile = process.env.DB_FILE ?? join(here, '..', 'data', 'schichtplaner.db');
@@ -28,8 +33,11 @@ function usage(): never {
   backup <zieldatei>                    Sicherung der Datenbank anlegen
   restore <sicherung>                   Sicherung zurückspielen (Server vorher stoppen!)
   reset-password <benutzer> [passwort]  Passwort zurücksetzen (ohne Angabe: zufällig)
+  password-link <benutzer>              Link erzeugen, über den der Benutzer sein Passwort selbst festlegt
   create-admin <benutzer> [passwort]    zusätzlichen Administrator anlegen
   list-users                            Benutzer auflisten
+  demo                                  Beispieldaten einfügen (zusätzlich zu vorhandenen Daten)
+  demo-remove                           Beispieldaten wieder vollständig entfernen
 
 Datenbank: ${dbFile}  (änderbar über DB_FILE)`);
   process.exit(cmd ? 1 : 0);
@@ -84,6 +92,19 @@ switch (cmd) {
     console.log(`Neues Passwort für "${a}": ${pw}\n(muss bei der nächsten Anmeldung geändert werden)`);
     break;
   }
+  case 'password-link': {
+    if (!a) usage();
+    const u = db.prepare('SELECT id FROM users WHERE username = ?').get(a) as { id: number } | undefined;
+    if (!u) {
+      console.error(`Benutzer "${a}" nicht gefunden.`);
+      process.exit(1);
+    }
+    const link = createPasswordLink(db, u.id, 'reset', null);
+    const base = (process.env.PUBLIC_URL ?? 'https://<adresse-der-app>').replace(/\/$/, '');
+    console.log(`Link für "${a}" (${LINK_DAYS} Tage gültig, einmal nutzbar):\n  ${base}/#/passwort/${link.token}`);
+    console.log(link.secretKind ? `Beim Öffnen wird abgefragt: ${SECRET_LABEL[link.secretKind]}` : 'Kein Prüfmerkmal hinterlegt (weder Personalnummer noch Kürzel) – Link nur persönlich weitergeben!');
+    break;
+  }
   case 'create-admin': {
     if (!a) usage();
     ensureEntryTypes(db);
@@ -104,7 +125,29 @@ switch (cmd) {
     for (const u of rows) console.log(`${u.username.padEnd(20)} ${u.display_name.padEnd(30)} ${u.is_admin ? 'Admin' : ''}${u.active ? '' : ' (inaktiv)'}`);
     break;
   }
+  case 'demo':
+  case 'demo-remove': {
+    try {
+      if (cmd === 'demo') {
+        printDemo('Beispieldaten eingefügt', insertDemoData(db));
+        console.log(`\nAnmeldung mit diesen Benutzern, Passwort jeweils "${DEMO_PASSWORD}".`);
+        console.log('Läuft der Server gerade, aktualisieren sich offene Pläne nach einem Neuladen der Seite.');
+      } else {
+        printDemo('Beispieldaten entfernt', removeDemoData(db).removed);
+      }
+    } catch (e) {
+      if (!(e instanceof DemoError)) throw e;
+      console.error(e.message);
+      process.exit(1);
+    }
+    break;
+  }
   default:
     usage();
 }
 db.close();
+
+function printDemo(title: string, s: DemoSummary) {
+  console.log(`${title}: ${s.departments} Abteilungen, ${s.teams} Teams, ${s.employees} Mitarbeiter, ${s.entries} Planeinträge`);
+  for (const u of s.users) console.log(`  ${u.username.padEnd(18)} ${u.role}`);
+}

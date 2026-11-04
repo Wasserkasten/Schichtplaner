@@ -7,6 +7,8 @@ export interface Me {
   employeeId: number | null;
   isAdmin: boolean;
   mustChangePassword: boolean;
+  /** persönliche Schriftgröße, 1 = 100 % */
+  fontScale: number;
 }
 export interface Department { id: number; name: string; sortOrder: number }
 export interface Team { id: number; departmentId: number; name: string; sortOrder: number; level: Level }
@@ -48,7 +50,8 @@ export interface Entry {
   updatedAt: string;
   masked?: boolean;
 }
-export interface Holiday { date: string; name: string }
+/** public = gesetzlicher Feiertag, company = betrieblich arbeitsfreier Tag (z. B. Heiligabend) */
+export interface Holiday { id: number; date: string; name: string; kind: 'public' | 'company'; fromSource: boolean }
 export interface Bootstrap {
   me: Me;
   permissions: { isAdmin: boolean; teams: Record<string, Level> };
@@ -58,6 +61,8 @@ export interface Bootstrap {
   entryTypes: EntryType[];
   users: { id: number; displayName: string }[];
   settings: { holidayState: string };
+  /** installierte Version (package.json) */
+  version: string;
 }
 export interface ViewConfig {
   kind: 'month' | 'day' | 'year';

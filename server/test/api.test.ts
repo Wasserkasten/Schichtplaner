@@ -132,3 +132,433 @@ describe('Backup', () => {
     expect(files).not.toContain('schichtplaner-20260102-000000.db');
   });
 });
+
+describe('Beispieldaten', () => {
+  const count = (table: string) => (db.prepare(`SELECT COUNT(*) n FROM ${table}`).get() as { n: number }).n;
+
+  it('lassen sich einfügen und vollständig entfernen, echte Daten bleiben erhalten', async () => {
+    const before = { departments: count('departments'), teams: count('teams'), employees: count('employees'), users: count('users') };
+    db.prepare("INSERT INTO entries(employee_id, date, type_id, created_by) VALUES (?, '2026-11-10', ?, ?)").run(ids.eA, ids.typeF, ids.admin);
+    const admin = await login('admin');
+
+    expect((await app.inject({ method: 'POST', url: '/api/admin/demo', headers: { cookie: await login('anna') } })).statusCode).toBe(403);
+
+    const res = await app.inject({ method: 'POST', url: '/api/admin/demo', headers: { cookie: admin } });
+    expect(res.statusCode).toBe(200);
+    const s = res.json();
+    expect(s).toMatchObject({ present: true, departments: 3, teams: 6, employees: 20 });
+    expect(s.users.map((u: { username: string }) => u.username)).toEqual(['demo.mitarbeiter', 'demo.teamleitung', 'demo.leser']);
+    expect(s.entries).toBeGreaterThan(500);
+    // gleichnamige Teams in verschiedenen Abteilungen
+    expect(count("teams WHERE name = 'Meisterei 1'")).toBe(2);
+    // ein zweites Mal geht nicht
+    expect((await app.inject({ method: 'POST', url: '/api/admin/demo', headers: { cookie: admin } })).statusCode).toBe(409);
+
+    // Beispiel-Teamleitung kann sich anmelden und arbeitet im Plan (erzeugt Protokolleintrag)
+    const loginRes = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'demo.teamleitung', password: 'demo1234' } });
+    expect(loginRes.statusCode).toBe(200);
+    const leadCookie = `sp_session=${loginRes.cookies.find((c) => c.name === 'sp_session')!.value}`;
+    const demoEmp = (db.prepare("SELECT e.id FROM employees e JOIN teams t ON t.id = e.team_id JOIN departments d ON d.id = t.department_id WHERE d.name = 'Beispiel Nord' AND t.name = 'Meisterei 1' LIMIT 1").get() as { id: number }).id;
+    expect((await app.inject({ method: 'POST', url: '/api/entries', headers: { cookie: leadCookie }, payload: { employeeId: demoEmp, date: '2026-11-20', text: 'Test' } })).statusCode).toBe(200);
+    const auditBefore = count('audit_log');
+
+    const del = await app.inject({ method: 'DELETE', url: '/api/admin/demo', headers: { cookie: admin } });
+    expect(del.statusCode).toBe(200);
+    expect({ departments: count('departments'), teams: count('teams'), employees: count('employees'), users: count('users') }).toEqual(before);
+    expect(count(`entries WHERE employee_id = ${ids.eA}`)).toBe(1); // echter Eintrag noch da
+    expect(count('audit_log')).toBe(auditBefore + 1); // Protokoll bleibt, plus Eintrag "entfernt"
+    expect((await app.inject({ method: 'GET', url: '/api/admin/demo', headers: { cookie: admin } })).json().present).toBe(false);
+    expect((await app.inject({ method: 'DELETE', url: '/api/admin/demo', headers: { cookie: admin } })).statusCode).toBe(409);
+  });
+
+  it('werden nicht entfernt, wenn ein echter Mitarbeiter in ein Beispiel-Team verschoben wurde', async () => {
+    const admin = await login('admin');
+    await app.inject({ method: 'POST', url: '/api/admin/demo', headers: { cookie: admin } });
+    const demoTeam = (db.prepare("SELECT t.id FROM teams t JOIN departments d ON d.id = t.department_id WHERE d.name = 'Beispiel Süd' LIMIT 1").get() as { id: number }).id;
+    db.prepare('UPDATE employees SET team_id = ? WHERE id = ?').run(demoTeam, ids.eA);
+    const res = await app.inject({ method: 'DELETE', url: '/api/admin/demo', headers: { cookie: admin } });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toContain('Anna A');
+    expect(count('employees')).toBe(22); // nichts gelöscht
+  });
+});
+
+describe('Feiertage verwalten', () => {
+  const holidaysOf = async (cookie: string, year: number) =>
+    (await app.inject({ method: 'GET', url: `/api/holidays?year=${year}`, headers: { cookie } })).json() as { id: number; date: string; name: string; kind: string; fromSource: boolean }[];
+
+  it('Jahr wird beim ersten Abruf automatisch mit gesetzlichen Feiertagen befüllt', async () => {
+    const list = await holidaysOf(await login('anna'), 2027);
+    expect(list.find((h) => h.name === 'Fronleichnam')).toMatchObject({ kind: 'public', fromSource: true }); // NW
+    expect(list.some((h) => h.name === 'Rosenmontag')).toBe(false); // kein Feiertag
+  });
+
+  it('Quelle bietet arbeitsfreie Tage an; Übernehmen, Anlegen, Ändern, Löschen', async () => {
+    const admin = await login('admin');
+    const src = (await app.inject({ method: 'GET', url: '/api/admin/holidays/source?year=2027', headers: { cookie: admin } })).json();
+    const rosen = src.items.find((i: { name: string }) => i.name === 'Rosenmontag');
+    expect(rosen).toMatchObject({ date: '2027-02-08', kind: 'company', group: 'common', status: 'missing' });
+    expect(src.items.find((i: { name: string }) => i.name === 'Neujahr').status).toBe('present');
+
+    const pick = src.items.filter((i: { name: string }) => ['Rosenmontag', 'Heiligabend', 'Silvester'].includes(i.name));
+    const imp = await app.inject({ method: 'POST', url: '/api/admin/holidays/import', headers: { cookie: admin }, payload: { year: 2027, items: pick } });
+    expect(imp.json()).toEqual({ imported: 3, removed: 0 });
+
+    const created = await app.inject({ method: 'POST', url: '/api/admin/holidays', headers: { cookie: admin }, payload: { date: '2027-06-18', name: 'Betriebsausflug', kind: 'company' } });
+    expect(created.statusCode).toBe(200);
+    expect((await app.inject({ method: 'POST', url: '/api/admin/holidays', headers: { cookie: admin }, payload: { date: '2027-06-18', name: 'Doppelt', kind: 'company' } })).statusCode).toBe(409);
+
+    let list = await holidaysOf(admin, 2027);
+    const neujahr = list.find((h) => h.name === 'Neujahr')!;
+    await app.inject({ method: 'PUT', url: `/api/admin/holidays/${neujahr.id}`, headers: { cookie: admin }, payload: { date: neujahr.date, name: 'Neujahr (Betrieb geschlossen)', kind: 'public' } });
+    const allerheiligen = list.find((h) => h.name === 'Allerheiligen')!;
+    expect((await app.inject({ method: 'DELETE', url: `/api/admin/holidays/${allerheiligen.id}`, headers: { cookie: admin } })).statusCode).toBe(200);
+
+    list = await holidaysOf(admin, 2027);
+    expect(list.find((h) => h.date === '2027-12-24')).toMatchObject({ name: 'Heiligabend', kind: 'company' });
+    expect(list.find((h) => h.date === '2027-06-18')).toMatchObject({ name: 'Betriebsausflug', fromSource: false });
+    expect(list.find((h) => h.date === '2027-01-01')).toMatchObject({ name: 'Neujahr (Betrieb geschlossen)', fromSource: false });
+    expect(list.some((h) => h.name === 'Allerheiligen')).toBe(false);
+    // gelöschter Feiertag wird nicht von selbst wieder angelegt
+    expect((await holidaysOf(admin, 2027)).some((h) => h.name === 'Allerheiligen')).toBe(false);
+  });
+
+  it('nur Administratoren dürfen ändern', async () => {
+    const anna = await login('anna');
+    expect((await app.inject({ method: 'POST', url: '/api/admin/holidays', headers: { cookie: anna }, payload: { date: '2027-06-18', name: 'X', kind: 'company' } })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'GET', url: '/api/admin/holidays/source?year=2027', headers: { cookie: anna } })).statusCode).toBe(403);
+  });
+
+  it('Wechsel des Bundeslandes tauscht nur unveränderte gesetzliche Feiertage aus', async () => {
+    const admin = await login('admin');
+    await holidaysOf(admin, 2027); // Jahr einrichten (NW)
+    await app.inject({ method: 'POST', url: '/api/admin/holidays', headers: { cookie: admin }, payload: { date: '2027-12-24', name: 'Heiligabend', kind: 'company' } });
+    const res = await app.inject({ method: 'PUT', url: '/api/admin/settings', headers: { cookie: admin }, payload: { holidayState: 'SN', ownTeamLevel: 'edit', defaultLevel: 'view' } });
+    expect(res.statusCode).toBe(200);
+    const names = (await holidaysOf(admin, 2027)).map((h) => h.name);
+    expect(names).toContain('Buß- und Bettag'); // neu (SN)
+    expect(names).toContain('Reformationstag'); // neu (SN)
+    expect(names).not.toContain('Fronleichnam'); // NW-Feiertag entfernt
+    expect(names).toContain('Heiligabend'); // eigener Eintrag bleibt
+  });
+});
+
+describe('Quelle', () => {
+  it('liefert regionale Feiertage gesondert', async () => {
+    const { sourceDays } = await import('../src/holidays.js');
+    const by = sourceDays(2026, 'BY');
+    expect(by.find((d) => d.name === 'Mariä Himmelfahrt')).toMatchObject({ group: 'regional', date: '2026-08-15' });
+    expect(by.find((d) => d.name === 'Heiligabend')).toMatchObject({ group: 'common', kind: 'company' });
+    expect(by.find((d) => d.name === 'Rosenmontag')!.date).toBe('2026-02-16');
+  });
+});
+
+describe('Mehrere Dienste pro Tag', () => {
+  const typeId = (code: string) => (db.prepare('SELECT id FROM entry_types WHERE code = ?').get(code) as { id: number }).id;
+  const post = (cookie: string, payload: object) => app.inject({ method: 'POST', url: '/api/entries', headers: { cookie }, payload });
+
+  it('bis zu drei Dienste, keine doppelte Eintragsart, Notizen zählen nicht mit', async () => {
+    const cookie = await login('anna');
+    const cell = { employeeId: ids.eA, date: '2026-11-12' };
+    for (const c of ['F', 'B', 'HO']) expect((await post(cookie, { ...cell, typeId: typeId(c) })).statusCode).toBe(200);
+    expect((await post(cookie, { ...cell, typeId: typeId('F') })).json().error).toContain('bereits eingetragen');
+    const fourth = await post(cookie, { ...cell, typeId: typeId('S') });
+    expect(fourth.statusCode).toBe(409);
+    expect(fourth.json().error).toContain('Höchstens 3');
+    expect((await post(cookie, { ...cell, text: 'Notiz geht trotzdem' })).statusCode).toBe(200);
+  });
+
+  it('Ändern in eine volle Zelle wird abgelehnt', async () => {
+    const cookie = await login('anna');
+    for (const c of ['F', 'B', 'HO']) await post(cookie, { employeeId: ids.eA, date: '2026-11-13', typeId: typeId(c) });
+    const other = (await post(cookie, { employeeId: ids.eA, date: '2026-11-14', typeId: typeId('S') })).json();
+    const res = await app.inject({ method: 'PATCH', url: `/api/entries/${other.id}`, headers: { cookie }, payload: { version: other.version, date: '2026-11-13' } });
+    expect(res.statusCode).toBe(409);
+  });
+
+  it('Pinsel "hinzufügen" ergänzt und überspringt volle bzw. schon belegte Tage', async () => {
+    const cookie = await login('anna');
+    await post(cookie, { employeeId: ids.eA, date: '2026-11-16', typeId: typeId('F') });
+    for (const c of ['F', 'B', 'HO']) await post(cookie, { employeeId: ids.eA, date: '2026-11-17', typeId: typeId(c) });
+    const res = await app.inject({
+      method: 'POST', url: '/api/entries/bulk', headers: { cookie },
+      payload: { action: 'add', typeId: typeId('B'), cells: ['2026-11-15', '2026-11-16', '2026-11-17'].map((date) => ({ employeeId: ids.eA, date })) },
+    });
+    expect(res.json()).toMatchObject({ skipped: 1 });
+    expect(res.json().created).toHaveLength(2);
+    const day16 = db.prepare("SELECT COUNT(*) n FROM entries WHERE employee_id = ? AND date = '2026-11-16'").get(ids.eA) as { n: number };
+    expect(day16.n).toBe(2); // F + B
+  });
+});
+
+describe('Persönliche Einstellungen', () => {
+  it('Schriftgröße wird je Benutzer gespeichert', async () => {
+    const cookie = await login('anna');
+    expect((await app.inject({ method: 'PUT', url: '/api/me/preferences', headers: { cookie }, payload: { fontScale: 1.3 } })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: '/api/bootstrap', headers: { cookie } })).json().me.fontScale).toBe(1.3);
+    expect((await app.inject({ method: 'PUT', url: '/api/me/preferences', headers: { cookie }, payload: { fontScale: 5 } })).statusCode).toBe(400);
+  });
+
+  it('bestehende Datenbank ohne Spalte wird beim Öffnen ergänzt', async () => {
+    const { mkdtempSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const Database = (await import('better-sqlite3')).default;
+    const file = join(mkdtempSync(join(tmpdir(), 'sp-mig-')), 'alt.db');
+    const old = new Database(file);
+    old.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT NOT NULL UNIQUE COLLATE NOCASE, display_name TEXT NOT NULL, password_hash TEXT NOT NULL, employee_id INTEGER, is_admin INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1, must_change_password INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')))");
+    old.close();
+    const migrated = openDb(file);
+    const cols = (migrated.prepare('PRAGMA table_info(users)').all() as { name: string }[]).map((c) => c.name);
+    expect(cols).toContain('font_scale');
+  });
+});
+
+describe('Rückgängig', () => {
+  const typeId = (code: string) => (db.prepare('SELECT id FROM entry_types WHERE code = ?').get(code) as { id: number }).id;
+  const cellCodes = (date: string) =>
+    (db.prepare('SELECT t.code FROM entries e JOIN entry_types t ON t.id = e.type_id WHERE e.employee_id = ? AND e.date = ? ORDER BY t.code').all(ids.eA, date) as { code: string }[]).map((r) => r.code).join(',');
+  const undo = (cookie: string, changeId: string) => app.inject({ method: 'POST', url: `/api/changes/${changeId}/undo`, headers: { cookie } });
+
+  it('nimmt einen Pinselstrich über mehrere Tage komplett zurück – und wieder her', async () => {
+    const cookie = await login('anna');
+    for (const date of ['2026-12-01', '2026-12-02']) await app.inject({ method: 'POST', url: '/api/entries', headers: { cookie }, payload: { employeeId: ids.eA, date, typeId: typeId('F') } });
+    const bulk = (await app.inject({
+      method: 'POST', url: '/api/entries/bulk', headers: { cookie },
+      payload: { action: 'set', typeId: typeId('U'), cells: ['2026-12-01', '2026-12-02', '2026-12-03'].map((date) => ({ employeeId: ids.eA, date })) },
+    })).json();
+    expect([cellCodes('2026-12-01'), cellCodes('2026-12-03')]).toEqual(['U', 'U']);
+
+    const u = await undo(cookie, bulk.changeId);
+    expect(u.statusCode).toBe(200);
+    expect([cellCodes('2026-12-01'), cellCodes('2026-12-02'), cellCodes('2026-12-03')]).toEqual(['F', 'F', '']);
+    expect((await undo(cookie, bulk.changeId)).statusCode).toBe(409); // schon zurückgenommen
+
+    const redo = await undo(cookie, u.json().changeId); // Rücknahme zurücknehmen = wiederholen
+    expect(redo.statusCode).toBe(200);
+    expect([cellCodes('2026-12-01'), cellCodes('2026-12-03')]).toEqual(['U', 'U']);
+  });
+
+  it('Änderung eines Eintrags zurücknehmen', async () => {
+    const cookie = await login('anna');
+    const e = (await app.inject({ method: 'POST', url: '/api/entries', headers: { cookie }, payload: { employeeId: ids.eA, date: '2026-12-05', typeId: typeId('F') } })).json();
+    const p = (await app.inject({ method: 'PATCH', url: `/api/entries/${e.id}`, headers: { cookie }, payload: { version: e.version, typeId: typeId('S') } })).json();
+    expect((await undo(cookie, p.changeId)).statusCode).toBe(200);
+    expect(cellCodes('2026-12-05')).toBe('F');
+    const d = (await app.inject({ method: 'DELETE', url: `/api/entries/${e.id}`, headers: { cookie } })).json();
+    expect((await undo(cookie, d.changeId)).statusCode).toBe(200);
+    expect(cellCodes('2026-12-05')).toBe('F');
+  });
+
+  it('verweigert, wenn jemand anderes den Eintrag inzwischen geändert hat', async () => {
+    const anna = await login('anna');
+    const lead = await login('lead');
+    const e = (await app.inject({ method: 'POST', url: '/api/entries', headers: { cookie: anna }, payload: { employeeId: ids.eA, date: '2026-12-06', typeId: typeId('F') } })).json();
+    await app.inject({ method: 'PATCH', url: `/api/entries/${e.id}`, headers: { cookie: lead }, payload: { version: e.version, typeId: typeId('N') } });
+    const res = await undo(anna, e.changeId);
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toContain('Lead');
+    expect(cellCodes('2026-12-06')).toBe('N'); // nichts verändert
+  });
+
+  it('fremde Änderungen nur als Administrator', async () => {
+    const anna = await login('anna');
+    const e = (await app.inject({ method: 'POST', url: '/api/entries', headers: { cookie: anna }, payload: { employeeId: ids.eA, date: '2026-12-07', typeId: typeId('F') } })).json();
+    expect((await undo(await login('lead'), e.changeId)).statusCode).toBe(403);
+    expect((await undo(await login('admin'), e.changeId)).statusCode).toBe(200);
+  });
+});
+
+describe('PDF, Version, Protokoll', () => {
+  it('Jahresübersicht als PDF für Mitarbeiter und Team, mit Rechteprüfung', async () => {
+    const anna = await login('anna');
+    const res = await app.inject({ method: 'GET', url: `/api/pdf/year?year=2026&employeeId=${ids.eA}`, headers: { cookie: anna } });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toBe('application/pdf');
+    expect(res.headers['content-disposition']).toContain('Jahresuebersicht_2026');
+    expect(res.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
+    const team = await app.inject({ method: 'GET', url: `/api/pdf/year?year=2026&teamId=${ids.tB}`, headers: { cookie: anna } });
+    expect(team.statusCode).toBe(200);
+    db.prepare("INSERT OR REPLACE INTO settings(key, value) VALUES ('default_level', 'none')").run();
+    expect((await app.inject({ method: 'GET', url: `/api/pdf/year?year=2026&teamId=${ids.tB}`, headers: { cookie: anna } })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'GET', url: '/api/pdf/year?year=2026', headers: { cookie: anna } })).statusCode).toBe(400);
+  });
+
+  it('Version und Changelog', async () => {
+    const pkg = JSON.parse((await import('node:fs')).readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
+    expect((await app.inject({ method: 'GET', url: '/api/health' })).json().version).toBe(pkg.version);
+    expect((await app.inject({ method: 'GET', url: '/api/admin/changelog', headers: { cookie: await login('anna') } })).statusCode).toBe(403);
+    const cl = (await app.inject({ method: 'GET', url: '/api/admin/changelog', headers: { cookie: await login('admin') } })).json();
+    expect(cl.markdown).toContain(`## [${pkg.version}]`);
+  });
+
+  it('Gesamtprotokoll mit Namen, Änderungs-ID und Rücknahme-Status', async () => {
+    const anna = await login('anna');
+    const typeF = ids.typeF;
+    const bulk = (await app.inject({ method: 'POST', url: '/api/entries/bulk', headers: { cookie: anna }, payload: { action: 'set', typeId: typeF, cells: ['2026-12-10', '2026-12-11'].map((date) => ({ employeeId: ids.eA, date })) } })).json();
+    await app.inject({ method: 'POST', url: `/api/changes/${bulk.changeId}/undo`, headers: { cookie: anna } });
+    const log = (await app.inject({ method: 'GET', url: '/api/audit?limit=3', headers: { cookie: await login('admin') } })).json();
+    const ofBulk = log.rows.filter((r: { change_id: string }) => r.change_id === bulk.changeId);
+    expect(ofBulk).toHaveLength(2); // Änderung nicht über die Seitengrenze zerteilt
+    expect(ofBulk[0]).toMatchObject({ employee_name: 'Anna A', user_name: 'Anna' });
+    expect(log.undone).toContain(bulk.changeId);
+  });
+});
+
+describe('Rückgängig – Mischstände vermeiden', () => {
+  it('lehnt ab, wenn ein angelegter Eintrag inzwischen von jemand anderem ersetzt wurde', async () => {
+    const typeId = (code: string) => (db.prepare('SELECT id FROM entry_types WHERE code = ?').get(code) as { id: number }).id;
+    const anna = await login('anna');
+    const lead = await login('lead');
+    const cell = [{ employeeId: ids.eA, date: '2026-12-20' }];
+    await app.inject({ method: 'POST', url: '/api/entries', headers: { cookie: anna }, payload: { ...cell[0], typeId: typeId('F') } });
+    const k = (await app.inject({ method: 'POST', url: '/api/entries/bulk', headers: { cookie: anna }, payload: { action: 'set', typeId: typeId('K'), cells: cell } })).json();
+    await app.inject({ method: 'POST', url: '/api/entries/bulk', headers: { cookie: lead }, payload: { action: 'set', typeId: typeId('S'), cells: cell } });
+    const res = await app.inject({ method: 'POST', url: `/api/changes/${k.changeId}/undo`, headers: { cookie: anna } });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toContain('Lead');
+    const codes = (db.prepare("SELECT t.code FROM entries e JOIN entry_types t ON t.id = e.type_id WHERE e.employee_id = ? AND e.date = '2026-12-20'").all(ids.eA) as { code: string }[]).map((r) => r.code);
+    expect(codes).toEqual(['S']); // kein „F S“
+  });
+});
+
+describe('Neuigkeiten', () => {
+  const CL = `# Changelog
+## [0.4.0] – 2027-01-10
+### Für alle
+- Neue Kürzel ab Januar
+### Wichtig
+- Ab 1.1. gilt **IV** statt **I**.
+### Neu
+- technische Details
+## [0.3.0] – 2026-11-04
+### Für alle
+- Rückgängig
+### Behoben
+- etwas Technisches
+## [0.2.0] – 2026-11-04
+### Neu
+- nur Technik
+`;
+
+  it('liest „Für alle“ und „Wichtig“ je Version aus dem Changelog', async () => {
+    const { parseChangelog, compareVersions } = await import('../src/news.js');
+    const n = parseChangelog(CL);
+    expect(n.map((x) => x.version)).toEqual(['0.4.0', '0.3.0', '0.2.0']);
+    expect(n[0]).toMatchObject({ date: '2027-01-10', forAll: '- Neue Kürzel ab Januar', important: '- Ab 1.1. gilt **IV** statt **I**.' });
+    expect(n[2].forAll).toBe('');
+    expect(compareVersions('0.10.0', '0.9.1')).toBeGreaterThan(0);
+  });
+
+  it('Leiste/Popup je nach Lesestand; neue Konten sehen keine alten Neuigkeiten', async () => {
+    const { parseChangelog, newsFor, acknowledgements } = await import('../src/news.js');
+    const notes = parseChangelog(CL);
+    const user = (seen: string | null, ack: string | null, admin = 0) => ({ seen_version: seen, ack_version: ack, is_admin: admin }) as never;
+    // war auf 0.2.0: sieht Neuigkeiten aus 0.3.0 und 0.4.0, dazu das Popup
+    const a = newsFor(user('0.2.0', '0.2.0'), notes, '0.4.0');
+    expect(a.banner).toBe(true);
+    expect(a.unseen.map((x) => x.version)).toEqual(['0.4.0', '0.3.0']);
+    expect(a.important.map((x) => x.version)).toEqual(['0.4.0']);
+    // gelesen und bestätigt: nichts mehr
+    const b = newsFor(user('0.4.0', '0.4.0'), notes, '0.4.0');
+    expect([b.banner, b.important.length]).toEqual([false, 0]);
+    // Version ohne „Für alle“: Mitarbeiter keine Leiste, Admin schon
+    const notesOnlyTech = parseChangelog('## [0.5.0] – x\n### Neu\n- Technik\n');
+    expect(newsFor(user('0.4.0', '0.4.0'), notesOnlyTech, '0.5.0').banner).toBe(false);
+    expect(newsFor(user('0.4.0', '0.4.0', 1), notesOnlyTech, '0.5.0').banner).toBe(true);
+    // Bestätigungen: Anna (aus dem Test-Setup) hat noch nicht bestätigt
+    db.prepare('UPDATE users SET ack_version = ?').run('0.4.0');
+    db.prepare("UPDATE users SET ack_version = '0.3.0' WHERE username = 'anna'").run();
+    expect(acknowledgements(db, notes)).toMatchObject({ version: '0.4.0', total: 3, acknowledged: 2, missing: ['Anna'] });
+  });
+
+  it('über die API: gesehen / bestätigt wird am Konto gespeichert, neue Benutzer starten aktuell', async () => {
+    const { APP_VERSION } = await import('../src/version.js');
+    db.prepare('UPDATE users SET seen_version = NULL, ack_version = NULL').run(); // wie nach einem Update von einer alten Version
+    const anna = await login('anna');
+    const before = (await app.inject({ method: 'GET', url: '/api/news', headers: { cookie: anna } })).json();
+    expect(before.version).toBe(APP_VERSION);
+    await app.inject({ method: 'POST', url: '/api/news/seen', headers: { cookie: anna } });
+    await app.inject({ method: 'POST', url: '/api/news/ack', headers: { cookie: anna } });
+    const after = (await app.inject({ method: 'GET', url: '/api/news', headers: { cookie: anna } })).json();
+    expect([after.banner, after.unseen.length, after.important.length]).toEqual([false, 0, 0]);
+    // neuer Benutzer über die Verwaltung
+    const admin = await login('admin');
+    await app.inject({ method: 'POST', url: '/api/admin/users', headers: { cookie: admin }, payload: { username: 'neu', displayName: 'Neu', password: 'geheim123', grants: [] } });
+    expect(db.prepare("SELECT seen_version, ack_version FROM users WHERE username = 'neu'").get()).toEqual({ seen_version: APP_VERSION, ack_version: APP_VERSION });
+  });
+});
+
+describe('Konten anlegen und Einrichtungslinks', () => {
+  const info = (token: string) => app.inject({ method: 'POST', url: '/api/password-link/info', payload: { token } });
+  const use = (token: string, secret: string, password = 'NeuesPasswort1') => app.inject({ method: 'POST', url: '/api/password-link/use', payload: { token, secret, password } });
+  const loginWith = (username: string, password: string) => app.inject({ method: 'POST', url: '/api/auth/login', payload: { username, password } });
+
+  it('Mitarbeiter mit Konto anlegen; Link mit Personalnummer einlösen; danach angemeldet', async () => {
+    const admin = await login('admin');
+    const res = await app.inject({
+      method: 'POST', url: '/api/admin/employees', headers: { cookie: admin },
+      payload: { teamId: ids.tA, firstName: 'Carla', lastName: 'Cramer', personnelNo: '4711', account: { username: 'carla.cramer' } },
+    });
+    expect(res.statusCode).toBe(200);
+    const { account, id: empId } = res.json();
+    expect(account).toMatchObject({ username: 'carla.cramer', link: { secretKind: 'personnel_no', purpose: 'setup' } });
+    expect(db.prepare('SELECT employee_id, display_name FROM users WHERE username = ?').get('carla.cramer')).toEqual({ employee_id: empId, display_name: 'Carla Cramer' });
+
+    const token = account.link.token;
+    expect((await info(token)).json()).toMatchObject({ username: 'carla.cramer', secretLabel: 'Personalnummer', purpose: 'setup' });
+    const wrong = await use(token, '1234');
+    expect(wrong.statusCode).toBe(403);
+    expect(wrong.json().error).toContain('Noch 4 Versuche');
+    const ok = await use(token, ' 4711 ');
+    expect(ok.statusCode).toBe(200);
+    expect(ok.cookies.some((c) => c.name === 'sp_session')).toBe(true); // gleich angemeldet
+    expect((await loginWith('carla.cramer', 'NeuesPasswort1')).statusCode).toBe(200);
+    expect((await use(token, '4711')).statusCode).toBe(410); // nur einmal nutzbar
+  });
+
+  it('Sperre nach 5 Fehlversuchen, Ablauf, neuer Link macht alten ungültig', async () => {
+    const admin = await login('admin');
+    db.prepare("UPDATE employees SET short_name = 'AAN' WHERE id = ?").run(ids.eA);
+    const mk = async () => (await app.inject({ method: 'POST', url: `/api/admin/users/${ids.anna}/password-link`, headers: { cookie: admin }, payload: {} })).json();
+    const l1 = await mk();
+    expect(l1.link.secretKind).toBe('short_name');
+    for (let i = 0; i < 5; i++) await use(l1.link.token, 'falsch');
+    expect((await use(l1.link.token, 'aan')).statusCode).toBe(423); // gesperrt
+    const l2 = await mk();
+    const l3 = await mk();
+    expect((await info(l2.link.token)).statusCode).toBe(404); // durch l3 ersetzt
+    db.prepare("UPDATE password_tokens SET expires_at = '2000-01-01T00:00:00Z'").run();
+    expect((await info(l3.link.token)).statusCode).toBe(410);
+  });
+
+  it('Benutzer mit neuem Mitarbeiter anlegen; ohne Passwort gibt es einen Link', async () => {
+    const admin = await login('admin');
+    const res = (await app.inject({
+      method: 'POST', url: '/api/admin/users', headers: { cookie: admin },
+      payload: { username: 'dora', displayName: 'Dora D', grants: [], newEmployee: { teamId: ids.tB, firstName: 'Dora', lastName: 'D', shortName: 'DOD' } },
+    })).json();
+    expect(res.link).toMatchObject({ secretKind: 'short_name' });
+    expect(db.prepare('SELECT team_id FROM employees WHERE id = ?').get(res.employeeId)).toEqual({ team_id: ids.tB });
+    const list = (await app.inject({ method: 'GET', url: '/api/admin/users', headers: { cookie: admin } })).json();
+    expect(list.find((u: { username: string }) => u.username === 'dora').pendingLink).toMatchObject({ purpose: 'setup' });
+    // Benutzername schon vergeben
+    const dup = await app.inject({ method: 'POST', url: '/api/admin/users', headers: { cookie: admin }, payload: { username: 'dora', displayName: 'X', grants: [] } });
+    expect(dup.statusCode).toBe(409);
+  });
+
+  it('Teamverwalter dürfen Mitarbeiter, aber keine Konten anlegen', async () => {
+    db.prepare("INSERT INTO grants(user_id, scope, scope_id, level) VALUES (?, 'team', ?, 'manage')").run(ids.anna, ids.tA);
+    const anna = await login('anna');
+    const base = { teamId: ids.tA, firstName: 'E', lastName: 'E' };
+    expect((await app.inject({ method: 'POST', url: '/api/admin/employees', headers: { cookie: anna }, payload: base })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'POST', url: '/api/admin/employees', headers: { cookie: anna }, payload: { ...base, account: { username: 'e.e' } } })).statusCode).toBe(403);
+  });
+
+  it('Ansprechpartner erscheint öffentlich auf der Anmeldeseite', async () => {
+    expect((await app.inject({ method: 'GET', url: '/api/public/login-info' })).json()).toEqual({ contact: null });
+    const admin = await login('admin');
+    await app.inject({ method: 'PUT', url: '/api/admin/support-contact', headers: { cookie: admin }, payload: { name: 'Leitstelle, Herr Meier', phone: '0221 123-45' } });
+    expect((await app.inject({ method: 'GET', url: '/api/public/login-info' })).json().contact).toMatchObject({ name: 'Leitstelle, Herr Meier', phone: '0221 123-45', email: '' });
+  });
+});

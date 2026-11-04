@@ -27,12 +27,12 @@ Eintragsart (Dienst | sonstige Anwesenheit | Abwesenheit)
 
 * **Mitarbeiter ≠ Benutzer.** Ein Mitarbeiter kann im Plan stehen, ohne ein Konto zu haben
   (z. B. während der Umstellung). Ein Konto kann ohne Mitarbeiter existieren (z. B. Personalabteilung).
-* **Mehrere Einträge pro Tag** sind erlaubt, z. B. „F“ + Notiz „Arzttermin 10 Uhr“.
+* **Mehrere Einträge pro Tag** sind erlaubt: bis zu **3 Dienste bzw. An-/Abwesenheiten** (z. B. IV-Dienst + Telefondienst, jede Art nur einmal) plus beliebige Notizen.
 * **Eintragsarten** (vorbelegt, frei änderbar):
   Dienste F/S/N/T/B · Anwesenheit Homeoffice, Dienstreise, Fortbildung ·
   Abwesenheit Urlaub, Freizeitausgleich, Sonderurlaub, Krank, Kind krank.
   Eigenschaften: Kürzel, Farbe, Standardzeiten, „zählt als Urlaub“, „vertraulich“.
-* **Feiertage** werden je Bundesland berechnet (einstellbar) und im Plan markiert.
+* **Feiertage** werden je Bundesland berechnet (eingebaute Quelle) und gespeichert; Administratoren können sie übernehmen, ändern, löschen und um **betrieblich arbeitsfreie Tage** (Heiligabend, Silvester, Rosenmontag …) ergänzen. Beide werden im Plan markiert und nicht als Urlaubstag gezählt.
 
 ## 3. Berechtigungen
 
@@ -53,11 +53,14 @@ Die effektive Stufe je Team ist das **Maximum** aus:
 ## 4. Ansichten
 
 * **Kalender** (Hauptansicht wie bisher): links Mitarbeiter gruppiert nach Team, oben Tage mit KW,
-  Wochenenden/Feiertage/Heute hervorgehoben, Besetzungszahl je Team und Tag.
+  Wochenenden/Feiertage/Heute hervorgehoben, nutzt die volle Fensterbreite. Mehrere Dienste stehen nebeneinander in der Zelle,
+  Notizen daneben als Markierung in der Ecke.
   - *Auswahlmodus*: Klick auf Zelle öffnet Dialog (Einträge, Freitext, Uhrzeiten, Zeitraum „bis“, Verlauf).
   - *Pinsel*: Eintragsart wählen, dann Zellen anklicken oder ein Rechteck aufziehen – schnelles Planen
     ganzer Wochen/Teams. „Leeren“ entfernt Einträge.
-  - Zeitraum: Monat, 7/14 Tage, 4/6 Wochen.
+  - Pinsel-Modus „zusätzlich eintragen“ (oder Strg-Klick) für weitere Dienste am selben Tag.
+  - Zeitraum: Monat, 7/14 Tage, 4/6 Wochen oder „Fensterbreite“ (so viele Tage, wie passen).
+* **Schriftgröße** je Benutzer einstellbar (90–175 %), gilt auf allen Geräten.
 * **Tag**: Wer hat welchen Dienst (nach Dienstart, mit Zeiten)? Wer ist sonst anwesend? Wer fehlt?
   Notizen, Mitarbeiter ohne Eintrag. Ideal fürs Handy.
 * **Jahr**: pro Mitarbeiter 12 Monate × 31 Tage, Auswertung je Eintragsart, Urlaubskonto (verplant/Rest).
@@ -66,6 +69,10 @@ Die effektive Stufe je Team ist das **Maximum** aus:
 * Ansichten sind per URL verlinkbar (`#/tag/2026-11-02`, `#/jahr/2026-01-01/5`).
 
 ## 5. Gleichzeitiges Arbeiten
+
+* **Rückgängig:** Jede Aktion (auch ein Pinselstrich über viele Zellen) hat eine Änderungs-ID; alle Protokollzeilen
+  dazu lassen sich gemeinsam zurücknehmen. Die Rücknahme prüft, dass keiner der Einträge inzwischen von jemand anderem
+  geändert wurde, und ist selbst wieder eine (zurücknehmbare) Änderung.
 
 * **Live-Aktualisierung** per Server-Sent Events: Änderungen erscheinen sofort bei allen, die den
   betroffenen Zeitraum offen haben – gefiltert/maskiert nach den Rechten des jeweiligen Empfängers.
@@ -102,14 +109,15 @@ Das ist ein privates Projekt mit Daten des Arbeitgebers – das sollte vor einem
 
 ## 8. Fahrplan
 
-**Erledigt (Version 0.1 – dieser Stand)**
-- Datenmodell, Rechte, Änderungsprotokoll, Feiertage
-- Kalender mit Pinsel, Zell-Dialog mit Verlauf, Tages- und Jahresansicht, gespeicherte Ansichten
-- Verwaltung: Abteilungen/Teams, Mitarbeiter, Benutzer & Rechte, Eintragsarten, Einstellungen, Protokoll
-- Live-Aktualisierung, Konflikterkennung, PWA, Docker-Betrieb
+**Erledigt** (Details je Version im [CHANGELOG](../CHANGELOG.md))
+- 0.1: Datenmodell, Rechte, Änderungsprotokoll, Feiertage; Kalender mit Pinsel, Zell-Dialog mit Verlauf, Tages- und
+  Jahresansicht, gespeicherte Ansichten; Verwaltung; Live-Aktualisierung, Konflikterkennung, PWA, Docker-Betrieb
+- 0.2: Cloudflare Tunnel, Port einstellbar
+- 0.3: Rückgängig mit Meldungen, lesbares Protokoll, Jahresübersicht drucken/PDF, Versionsnummer und Changelog,
+  bis zu 3 Dienste pro Tag, volle Kalenderbreite, Schriftgröße, Feiertage verwalten, Beispieldaten
 
 **Als Nächstes**
-1. Import der bisherigen Daten aus schichtplaner.de (CSV/Excel-Export) und Export (Excel/PDF/Druckansicht)
+1. Import der bisherigen Daten aus schichtplaner.de (CSV/Excel-Export) und Export des Monatsplans (Excel/PDF)
 2. Tastaturbedienung im Kalender (Pfeiltasten + Kürzel tippen, wie in einer Tabellenkalkulation), Kopieren/Einfügen
 3. Mobile Kalenderansicht (Wochenliste pro Person statt breiter Tabelle), „Mein Plan“ als Startseite auf dem Handy
 4. Mindestbesetzung je Team/Dienst mit Warnung bei Unterschreitung

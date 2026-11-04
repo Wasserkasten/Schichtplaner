@@ -10,7 +10,8 @@ const viewConfig = z.object({
   kind: z.enum(['month', 'day', 'year']),
   teamIds: z.array(z.number().int()).default([]),
   employeeId: z.number().int().nullable().optional(),
-  days: z.number().int().min(7).max(62).optional(), // Anzahl Tage in der Kalenderansicht
+  // Anzahl Tage in der Kalenderansicht; -1 = so viele, wie in die Fensterbreite passen
+  days: z.union([z.literal(-1), z.number().int().min(7).max(62)]).optional(),
   showWeekends: z.boolean().optional(),
 });
 const viewBody = z.object({

@@ -1,7 +1,7 @@
 {
   "name": "schichtplaner",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Schichtplaner – Dienst- und Abwesenheitsplanung für Teams (Hobbyprojekt)",
   "workspaces": [
     "server",

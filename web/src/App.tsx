@@ -6,12 +6,17 @@ import type { SavedView, ViewConfig } from './types';
 import { MonthView } from './views/MonthView';
 import { DayView } from './views/DayView';
 import { YearView } from './views/YearView';
-import { AdminView } from './views/AdminView';
+import { AdminView, type AdminTab } from './views/AdminView';
 import { LoginView } from './views/LoginView';
+import { SetPasswordView } from './views/SetPasswordView';
 import { TeamFilter } from './components/TeamFilter';
 import { ViewMenu } from './components/ViewMenu';
 import { PasswordDialog } from './components/PasswordDialog';
 import { Toasts } from './components/Toasts';
+import { ChangeHistoryMenu, ChangePopups } from './components/ChangeNotices';
+import { ImportantDialog, NewsDialog, type News } from './components/News';
+import { FONT_STEPS, applyFontScale, nextStep, saveFontScale } from './fontScale';
+import { reportError } from './helpers';
 
 export type Kind = ViewConfig['kind'] | 'admin';
 
@@ -43,16 +48,22 @@ export function App() {
   const [nav, setNav] = useState<NavState>({ kind: 'month', date: today(), teamIds: [], employeeId: null, days: 0, ...fromHash() });
   const [views, setViews] = useState<SavedView[]>([]);
   const [pwOpen, setPwOpen] = useState(false);
+  const [linkToken, setLinkToken] = useState<string | null>(() => /^#\/passwort\/([\w-]{10,})/.exec(location.hash)?.[1] ?? null);
+  const [adminTab, setAdminTab] = useState<AdminTab | undefined>(undefined);
+  const [news, setNews] = useState<News | null>(null);
+  const [newsOpen, setNewsOpen] = useState<'unseen' | 'recent' | null>(null);
 
   async function init() {
     try {
       const boot = await store.loadBootstrap();
+      applyFontScale(boot.me.fontScale ?? 1);
       const v = await get<SavedView[]>('/api/views');
       setViews(v);
       const def = v.find((x) => x.isDefault);
       if (def && !location.hash) applyView(def.config);
       else if (!nav.employeeId) setNav((n) => ({ ...n, employeeId: boot.me.employeeId ?? boot.employees[0]?.id ?? null }));
       store.connect();
+      get<News>('/api/news').then(setNews, () => {});
       setState('ready');
       if (boot.me.mustChangePassword) setPwOpen(true);
     } catch (e) {
@@ -63,11 +74,29 @@ export function App() {
 
   useEffect(() => {
     void init();
-    const onHash = () => setNav((n) => ({ ...n, ...fromHash() }));
+    const onHash = () => {
+      // Link zum Passwort in einen offenen Tab eingefügt
+      const t = /^#\/passwort\/([\w-]{10,})/.exec(location.hash)?.[1];
+      if (t) return setLinkToken(t);
+      setNav((n) => ({ ...n, ...fromHash() }));
+    };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Admin hat Verwaltung → Info geöffnet: Leiste ausblenden
+  useEffect(() => {
+    const onSeen = () => setNews((n) => (n ? { ...n, banner: false } : n));
+    window.addEventListener('sp-version-seen', onSeen);
+    return () => window.removeEventListener('sp-version-seen', onSeen);
+  }, []);
+
+  /** Leiste geschlossen bzw. Neuigkeiten geöffnet -> am Konto als gelesen merken. */
+  function newsSeen() {
+    setNews((n) => (n ? { ...n, banner: false } : n));
+    post('/api/news/seen').catch(() => {});
+  }
 
   useEffect(() => {
     if (state === 'ready' && location.hash !== toHash(nav)) history.replaceState(null, '', toHash(nav));
@@ -89,13 +118,26 @@ export function App() {
     setState('login');
   }
 
+  // Einrichtungs-/Zurücksetz-Link (#/passwort/<token>) – unabhängig davon, ob jemand angemeldet ist
+  if (linkToken) {
+    return (
+      <SetPasswordView
+        token={linkToken}
+        onDone={() => {
+          history.replaceState(null, '', '/'); // Token nicht im Verlauf lassen
+          setLinkToken(null);
+          void init();
+        }}
+      />
+    );
+  }
   if (state === 'loading') return <div className="center muted">Lade …</div>;
   if (state === 'login' || !st.boot) return <LoginView onLoggedIn={() => void init()} />;
 
   const boot = st.boot;
   const canAdmin = boot.me.isAdmin || boot.teams.some((t) => t.level === 'manage');
   const tab = (k: Kind, label: string) => (
-    <button className={nav.kind === k ? 'tab active' : 'tab'} onClick={() => setNav({ ...nav, kind: k })}>
+    <button className={nav.kind === k ? 'tab active' : 'tab'} onClick={() => { setAdminTab(undefined); setNav({ ...nav, kind: k }); }}>
       {label}
     </button>
   );
@@ -122,25 +164,77 @@ export function App() {
           />
         )}
         <div className="spacer" />
+        <ChangeHistoryMenu />
         <span className={st.live ? 'live on' : 'live'} title={st.live ? 'Live-Aktualisierung aktiv' : 'Keine Live-Verbindung'}>
           ●
         </span>
         <details className="usermenu">
           <summary>{boot.me.displayName}</summary>
           <div className="menu">
+            <button onClick={() => setNewsOpen('recent')}>Neuigkeiten</button>
             <button onClick={() => setPwOpen(true)}>Passwort ändern</button>
             <button onClick={() => void logout()}>Abmelden</button>
+            <FontSizeControl value={boot.me.fontScale} />
           </div>
         </details>
       </header>
+      {news?.banner && (
+        <div className="update-banner" role="status">
+          Der Schichtplaner wurde auf Version <strong>{news.version}</strong> aktualisiert.
+          <button
+            className="link"
+            onClick={() => {
+              if (news.unseen.length) setNewsOpen('unseen');
+              else { setAdminTab('info'); setNav({ ...nav, kind: 'admin' }); } // nur technische Änderungen: Admin direkt zum Changelog
+              newsSeen();
+            }}
+          >
+            Was ist neu?
+          </button>
+          <button className="icon" aria-label="Hinweis schließen" onClick={newsSeen}>✕</button>
+        </div>
+      )}
       <main>
         {nav.kind === 'month' && <MonthView nav={nav} setNav={setNav} />}
         {nav.kind === 'day' && <DayView nav={nav} setNav={setNav} />}
         {nav.kind === 'year' && <YearView nav={nav} setNav={setNav} />}
-        {nav.kind === 'admin' && <AdminView />}
+        {nav.kind === 'admin' && <AdminView key={adminTab ?? 'default'} initialTab={adminTab} />}
       </main>
+      {newsOpen && (
+        <NewsDialog
+          notes={newsOpen === 'unseen' ? news?.unseen ?? [] : null}
+          onClose={() => setNewsOpen(null)}
+          onFullChangelog={boot.me.isAdmin ? () => { setNewsOpen(null); setAdminTab('info'); setNav({ ...nav, kind: 'admin' }); } : undefined}
+        />
+      )}
+      {!pwOpen && news && news.important.length > 0 && (
+        <ImportantDialog notes={news.important} onDone={() => setNews({ ...news, important: [] })} />
+      )}
       {pwOpen && <PasswordDialog forced={boot.me.mustChangePassword} onClose={() => { setPwOpen(false); void store.loadBootstrap(); }} />}
+      <ChangePopups />
       <Toasts />
+    </div>
+  );
+}
+
+/** Schriftgröße im Benutzermenü: gilt für dieses Benutzerkonto auf allen Geräten. */
+function FontSizeControl({ value }: { value: number }) {
+  const set = async (v: number) => {
+    try {
+      await saveFontScale(v);
+      await store.loadBootstrap();
+    } catch (e) {
+      reportError(e);
+    }
+  };
+  const min = FONT_STEPS[0];
+  const max = FONT_STEPS[FONT_STEPS.length - 1];
+  return (
+    <div className="fontsize" title="Schriftgröße – gilt für dein Konto auf allen Geräten">
+      <span className="small">Schrift</span>
+      <button aria-label="Schrift kleiner" disabled={value <= min} onClick={() => void set(nextStep(value, -1))}>A−</button>
+      <button className="val" aria-label="Schriftgröße zurücksetzen" title="auf 100 % zurücksetzen" onClick={() => void set(1)}>{Math.round(value * 100)} %</button>
+      <button aria-label="Schrift größer" disabled={value >= max} onClick={() => void set(nextStep(value, 1))}>A+</button>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { readFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { APP_VERSION } from './version.js';
 import { fileURLToPath } from 'node:url';
 
 export type DB = Database.Database;
@@ -26,7 +27,30 @@ export function openDb(file: string): DB {
   db.pragma('foreign_keys = ON');
   db.pragma('busy_timeout = 5000');
   db.exec(loadSchema());
+  migrate(db);
+  setSetting(db, 'app_version', APP_VERSION); // für den Trigger „neue Benutzer sehen keine alten Neuigkeiten“
   return db;
+}
+
+/** Ergänzt Spalten in bestehenden Datenbanken (CREATE TABLE IF NOT EXISTS ändert vorhandene Tabellen nicht). */
+function migrate(db: DB): void {
+  const has = (table: string, col: string) =>
+    (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).some((c) => c.name === col);
+  if (!has('users', 'font_scale')) db.exec('ALTER TABLE users ADD COLUMN font_scale REAL NOT NULL DEFAULT 1');
+  // Änderungs-ID: alle Protokollzeilen einer Aktion (z. B. ein Pinselstrich) gehören zusammen und lassen sich gemeinsam zurücknehmen
+  if (!has('audit_log', 'change_id')) db.exec('ALTER TABLE audit_log ADD COLUMN change_id TEXT');
+  if (!has('audit_log', 'undo_of')) db.exec('ALTER TABLE audit_log ADD COLUMN undo_of TEXT');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_audit_change ON audit_log(change_id)');
+  // Neuigkeiten: bis zu welcher Version hat der Benutzer die Hinweise gesehen bzw. „Wichtiges“ bestätigt?
+  if (!has('users', 'seen_version')) db.exec('ALTER TABLE users ADD COLUMN seen_version TEXT');
+  if (!has('users', 'ack_version')) db.exec('ALTER TABLE users ADD COLUMN ack_version TEXT');
+  // Neue Konten sollen keine alten Neuigkeiten sehen: beim Anlegen auf die laufende Version setzen
+  db.exec(`CREATE TRIGGER IF NOT EXISTS users_news_start AFTER INSERT ON users WHEN NEW.seen_version IS NULL
+           BEGIN
+             UPDATE users SET seen_version = (SELECT value FROM settings WHERE key = 'app_version'),
+                              ack_version  = (SELECT value FROM settings WHERE key = 'app_version')
+             WHERE id = NEW.id;
+           END`);
 }
 
 export function getSetting(db: DB, key: string, fallback = ''): string {
@@ -49,11 +73,15 @@ export function audit(
     date?: string | null;
     before?: unknown;
     after?: unknown;
+    /** gemeinsame ID aller Zeilen einer Aktion */
+    changeId?: string | null;
+    /** bei einer Rücknahme: die zurückgenommene Änderungs-ID */
+    undoOf?: string | null;
   },
 ): void {
   db.prepare(
-    `INSERT INTO audit_log(user_id, action, entity, entity_id, employee_id, date, before_json, after_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO audit_log(user_id, action, entity, entity_id, employee_id, date, before_json, after_json, change_id, undo_of)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     a.userId,
     a.action,
@@ -63,5 +91,7 @@ export function audit(
     a.date ?? null,
     a.before === undefined ? null : JSON.stringify(a.before),
     a.after === undefined ? null : JSON.stringify(a.after),
+    a.changeId ?? null,
+    a.undoOf ?? null,
   );
 }

@@ -71,3 +71,42 @@ export function holidays(year: number, state: string): Holiday[] {
 
   return list.sort((a, b) => a.date.localeCompare(b.date));
 }
+
+/** Art eines Tages: gesetzlicher Feiertag oder betrieblich arbeitsfreier Tag. */
+export type HolidayKind = 'public' | 'company';
+
+export interface SourceDay {
+  date: string;
+  name: string;
+  kind: HolidayKind;
+  /** official = gesetzlich im ganzen Bundesland, regional = nur in Teilen, common = häufig arbeitsfrei, aber kein Feiertag */
+  group: 'official' | 'regional' | 'common';
+  note?: string;
+}
+
+/**
+ * Alles, was die eingebaute Quelle für ein Jahr anbietet: gesetzliche Feiertage des Bundeslandes,
+ * nur regional geltende Feiertage und häufig arbeitsfreie Tage (Vorschläge, keine Feiertage).
+ */
+export function sourceDays(year: number, state: string): SourceDay[] {
+  const s = state.toUpperCase();
+  const easter = easterSunday(year);
+  const list: SourceDay[] = holidays(year, s).map((h) => ({ ...h, kind: 'public', group: 'official' }));
+  const regional = (d: Date, name: string, note: string) => list.push({ date: iso(d), name, kind: 'public', group: 'regional', note });
+  const common = (d: Date, name: string, note?: string) => list.push({ date: iso(d), name, kind: 'company', group: 'common', note });
+
+  if (s === 'BY') {
+    regional(utc(year, 8, 8), 'Augsburger Friedensfest', 'nur im Stadtgebiet Augsburg');
+    regional(utc(year, 8, 15), 'Mariä Himmelfahrt', 'in Gemeinden mit überwiegend katholischer Bevölkerung');
+  }
+  if (s === 'SN') regional(addDays(easter, 60), 'Fronleichnam', 'in einigen Gemeinden im Landkreis Bautzen');
+  if (s === 'TH') regional(addDays(easter, 60), 'Fronleichnam', 'im Eichsfeld und einigen weiteren Gemeinden');
+
+  common(addDays(easter, -52), 'Weiberfastnacht', 'Karneval/Fastnacht, v. a. im Rheinland');
+  common(addDays(easter, -48), 'Rosenmontag', 'Karneval/Fastnacht');
+  common(addDays(easter, -47), 'Faschingsdienstag', 'Karneval/Fastnacht');
+  common(utc(year, 12, 24), 'Heiligabend');
+  common(utc(year, 12, 31), 'Silvester');
+
+  return list.sort((a, b) => a.date.localeCompare(b.date) || a.group.localeCompare(b.group));
+}

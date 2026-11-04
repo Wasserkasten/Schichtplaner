@@ -20,7 +20,7 @@ export function PasswordDialog({ forced, onClose }: { forced: boolean; onClose: 
     }
   }
   return (
-    <Modal title="Passwort ändern" onClose={onClose}>
+    <Modal title="Passwort ändern" onClose={onClose} closable={!forced}>
       {forced && <p className="hint">Bitte vergib ein eigenes Passwort, bevor du weiterarbeitest.</p>}
       <form className="form" onSubmit={submit}>
         <label>Aktuelles Passwort<input type="password" autoComplete="current-password" value={oldPassword} onChange={(e) => setOld(e.target.value)} /></label>

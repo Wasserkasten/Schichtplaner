@@ -12,6 +12,10 @@ import { planRoutes } from './routes/plan.js';
 import { entryRoutes } from './routes/entries.js';
 import { adminRoutes } from './routes/admin.js';
 import { viewRoutes } from './routes/views.js';
+import { holidayRoutes } from './routes/holidays.js';
+import { pdfRoutes } from './routes/pdf.js';
+import { infoRoutes } from './routes/info.js';
+import { APP_VERSION } from './version.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -89,7 +93,7 @@ export async function buildApp(opts: {
     return reply.status(500).send({ error: 'Interner Fehler' });
   });
 
-  app.get('/api/health', async () => ({ ok: true }));
+  app.get('/api/health', async () => ({ ok: true, version: APP_VERSION }));
 
   await app.register(async (api) => {
     await authRoutes(api, ctx);
@@ -97,6 +101,9 @@ export async function buildApp(opts: {
     await entryRoutes(api, ctx);
     await adminRoutes(api, ctx);
     await viewRoutes(api, ctx);
+    await holidayRoutes(api, ctx);
+    await pdfRoutes(api, ctx);
+    await infoRoutes(api, ctx);
   });
 
   if (opts.staticDir && existsSync(opts.staticDir)) {

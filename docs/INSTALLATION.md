@@ -188,15 +188,19 @@ Ohne `ADMIN_PASSWORD` erzeugt die App ein zufälliges Passwort und schreibt es i
 
 Alles Folgende geschieht im Browser unter **Verwaltung** (nur für Administratoren sichtbar). Empfohlene Reihenfolge:
 
+> **Erst einmal nur ausprobieren?** Mit [Beispieldaten](#39-beispieldaten-zum-ausprobieren) ist der Plan in einem Klick gefüllt
+> und lässt sich danach genauso schnell wieder leeren.
+
 ### 3.1 Einstellungen
 
 *Verwaltung → Einstellungen*
 
 | Einstellung | Bedeutung | Empfehlung |
 |---|---|---|
-| Bundesland | bestimmt die angezeigten gesetzlichen Feiertage | Bundesland des Betriebs |
+| Bundesland | Quelle für die gesetzlichen Feiertage (Anpassungen unter *Feiertage*, siehe [3.8](#38-feiertage-und-arbeitsfreie-tage)) | Bundesland des Betriebs – **vor** dem Anpassen der Feiertage einstellen |
 | Recht aller Benutzer auf alle Teams | Grundstufe für jeden angemeldeten Benutzer | **ansehen**: jeder sieht den Gesamtplan; „kein Zugriff“, wenn Teams sich nicht sehen sollen |
 | Recht auf das eigene Team | gilt automatisch für das Team des verknüpften Mitarbeiters | **bearbeiten**: entspricht „jeder Mitarbeiter kann im eigenen Team ändern“ |
+| Hilfe bei Anmeldeproblemen | Ansprechpartner (Name/Stelle, Telefon, E-Mail, Hinweis) für vergessene Passwörter und abgelaufene Links; erscheint öffentlich auf der Anmeldeseite und im Zugangsschreiben | z. B. Leitstelle mit Durchwahl – keine privaten Nummern |
 
 ### 3.2 Abteilungen und Teams
 
@@ -207,11 +211,20 @@ Alles Folgende geschieht im Browser unter **Verwaltung** (nur für Administrator
 *Verwaltung → An-/Abwesenheitsarten*: Vorbelegt sind übliche Dienste (F, S, N, T, B), Anwesenheiten (HO, DR, FB) und Abwesenheiten (U, FA, SU, K, KK).
 Diese Werte am besten an die bisherigen Kürzel aus schichtplaner.de anpassen, damit sich niemand umgewöhnen muss.
 
-- **Kategorie**: entscheidet, wo der Eintrag in der Tagesübersicht erscheint (*Im Dienst*, *Sonstige Anwesenheit* oder *Abwesend*). Nur Dienste zählen zur Besetzungszahl.
+- **Kategorie**: entscheidet, wo der Eintrag in der Tagesübersicht erscheint (*Im Dienst*, *Sonstige Anwesenheit* oder *Abwesend*).
 - **Beginn/Ende**: Standardzeiten (pro Eintrag überschreibbar)
 - **zählt als Urlaub**: geht in das Urlaubskonto im Jahreskalender ein
 - **vertraulich**: z. B. Krank. Klartext sehen nur Benutzer, die das Team bearbeiten dürfen, und der Mitarbeiter selbst; alle anderen sehen „abwesend“
 - Nicht mehr benötigte Arten auf **inaktiv** setzen statt sie zu löschen; alte Einträge bleiben dann lesbar.
+
+**Mehrere Dienste an einem Tag:** Ein Mitarbeiter kann an einem Tag bis zu **3** Dienste bzw. An-/Abwesenheiten haben, z. B.
+IV-Dienst und Telefondienst (dieselbe Art nicht doppelt; Notizen zählen nicht mit). Dafür die Arten hier anlegen und im Kalender:
+
+- im Zell-Dialog unter *Neuer Eintrag* hinzufügen – an einem einzelnen Tag wird standardmäßig **zusätzlich** eingetragen,
+  über einen Zeitraum (z. B. Urlaub) werden vorhandene Dienste ersetzt; beides lässt sich mit dem Häkchen umschalten, oder
+- mit dem Pinsel bei gesetztem Häkchen **„zusätzlich eintragen“** bzw. mit **Strg** (Mac: ⌘) beim Klicken.
+
+Tage, die schon voll sind oder die Art bereits haben, werden dabei übersprungen (mit Hinweis).
 
 ### 3.4 Mitarbeiter
 
@@ -220,13 +233,32 @@ sie verschwinden aus dem Plan, ihre Historie bleibt erhalten.
 
 ### 3.5 Benutzer und Rechte
 
-*Verwaltung → Benutzer & Rechte → + Benutzer*
+Mitarbeiter und Benutzerkonten gehören normalerweise paarweise zusammen; beides lässt sich in einem Schritt anlegen:
 
-1. **Benutzername** (z. B. `vorname.nachname`), **Anzeigename**, **Startpasswort**
-2. **Verknüpfter Mitarbeiter**: daraus ergibt sich das „eigene Team“
-3. Optional **zusätzliche Berechtigungen** anlegen
+- *Verwaltung → Mitarbeiter → + Mitarbeiter*: Häkchen **„Benutzerkonto gleich mit anlegen“** (Benutzername wird als
+  `vorname.nachname` vorgeschlagen).
+- *Verwaltung → Mitarbeiter*: in der Spalte **Konto** bei Mitarbeitern ohne Konto **+ Konto** – ein Klick.
+- *Verwaltung → Benutzer & Rechte → + Benutzer*: **„neuen Mitarbeiter gleich mit anlegen“** oder einen vorhandenen verknüpfen.
+  Ohne verknüpften Mitarbeiter (z. B. Personalabteilung) gibt es kein „eigenes Team“.
 
-Die Startpasswörter gibst du persönlich weiter. Bei der ersten Anmeldung muss jeder ein eigenes Passwort vergeben.
+Konten mit Mitarbeiter-Verknüpfung können nur Administratoren anlegen; Teamverwalter legen nur Mitarbeiter an.
+
+**Passwort – empfohlen: Einrichtungslink.** Statt ein Passwort zu vergeben, erzeugt die App einen persönlichen Link:
+
+1. Nach dem Anlegen erscheint der Link mit **QR-Code**. Weitergeben per **Link kopieren** (Chat, Teams …) oder
+   **Zugangsschreiben drucken** (A4 mit Name, Benutzername, QR-Code, Anleitung und Ansprechpartner).
+2. Der Kollege öffnet den Link, bestätigt sich mit seiner **Personalnummer** (falls hinterlegt, sonst dem **Kürzel**)
+   und legt **selbst** ein Passwort fest – danach ist er angemeldet. Du erfährst das Passwort nie.
+3. Der Link gilt **7 Tage**, ist **einmal** verwendbar und nach **5** falschen Eingaben gesperrt. In der Benutzerliste
+   steht so lange „Einrichtung offen“.
+
+Ohne Personalnummer und Kürzel gibt es keine Rückfrage – dann den Link nur persönlich übergeben. Alternativ lässt sich
+ein **Startpasswort** festlegen (Knopf **🎲 Zufällig** erzeugt ein gut lesbares), das bei der ersten Anmeldung geändert
+werden muss.
+
+**Passwort vergessen:** *Benutzer bearbeiten → 🔗 Link zum Zurücksetzen erstellen* – gleicher Ablauf, ein älterer Link
+wird ungültig. Wen Kollegen dafür ansprechen sollen, steht auf der Anmeldeseite unter „Passwort vergessen?“
+(einstellbar unter *Einstellungen → Hilfe bei Anmeldeproblemen*).
 
 Typische Konfigurationen:
 
@@ -246,14 +278,108 @@ Es gilt immer die höchste zutreffende Stufe.
 
 ### 3.6 Ansichten
 
-Jeder Benutzer kann im Menü **Ansichten** die aktuelle Auswahl speichern (Ansicht + Teamfilter) und eine davon als **Standardansicht**
-festlegen; sie öffnet sich nach der Anmeldung. Administratoren können Ansichten **für alle freigeben**, z. B. „Leitstelle gesamt“.
+Jeder Benutzer kann im Menü **Ansichten** die aktuelle Auswahl speichern (Ansicht + Teamfilter + Zeitraum) und eine davon als
+**Standardansicht** festlegen; sie öffnet sich nach der Anmeldung. Administratoren können Ansichten **für alle freigeben**, z. B. „Leitstelle gesamt“.
+
+Der Kalender nutzt immer die volle Fensterbreite. Als **Zeitraum** gibt es *Monat*, 7/14 Tage, 4/6 Wochen und **Fensterbreite** –
+dann werden so viele Tage gezeigt, wie nebeneinander passen (auf einem 1920-px-Bildschirm etwa 50), ab Montag der aktuellen Woche.
+
+**Schriftgröße:** im Benutzermenü oben rechts mit **A−** / **A+** (90 % bis 175 %, Klick auf die Prozentzahl = 100 %). Die Einstellung
+gehört zum Benutzerkonto und gilt damit auf allen Geräten – auch, wenn sich mehrere Kollegen einen PC teilen.
 
 ### 3.7 Als App installieren (PWA)
 
 - **Android (Chrome):** Seite öffnen → Menü ⋮ → *App installieren* bzw. *Zum Startbildschirm hinzufügen*
 - **iPhone/iPad (Safari):** Teilen-Symbol → *Zum Home-Bildschirm*
 - **Windows/macOS (Chrome/Edge):** Installieren-Symbol rechts in der Adressleiste
+
+### 3.8 Feiertage und arbeitsfreie Tage
+
+*Verwaltung → Feiertage*
+
+**Woher kommen die Feiertage?** Die App berechnet die gesetzlichen Feiertage selbst – feste Termine und die beweglichen
+Feiertage über die Osterformel, jeweils passend zum Bundesland aus den *Einstellungen*. Dafür ist keine Internetverbindung nötig.
+Jedes Jahr wird beim ersten Aufruf automatisch damit befüllt; danach gilt, was in dieser Liste steht.
+
+Es gibt zwei Arten von Tagen; beide werden im Plan markiert und im Jahreskalender nicht als Urlaubstag gezählt:
+
+| Art | Farbe im Plan | Beispiele |
+|---|---|---|
+| **Feiertag** | orange | gesetzliche Feiertage |
+| **arbeitsfrei** | grün | betrieblich freie Tage ohne gesetzlichen Status: Heiligabend, Silvester, Rosenmontag, Betriebsruhe |
+
+Möglichkeiten:
+
+- **Aus Quelle übernehmen …** zeigt für das gewählte Jahr alles, was die eingebaute Quelle anbietet, mit Häkchen zum Auswählen:
+  - *Gesetzliche Feiertage* des Bundeslandes (fehlende sind vorausgewählt)
+  - *Regionale Feiertage*, die nur in Teilen gelten, z. B. Mariä Himmelfahrt oder Augsburger Friedensfest in Bayern, Fronleichnam in Teilen Sachsens und Thüringens
+  - *Häufig arbeitsfreie Tage*: Weiberfastnacht, Rosenmontag, Faschingsdienstag, Heiligabend, Silvester – werden als „arbeitsfrei“ übernommen
+
+  Steht am selben Datum schon ein anderer Eintrag, wird er beim Übernehmen ersetzt (der Dialog weist darauf hin).
+- **+ Tag hinzufügen** für eigene Tage, z. B. „Betriebsruhe“ zwischen den Jahren oder einen Betriebsausflug.
+- **Bearbeiten** und **Löschen** für jeden Eintrag. Gelöschte Feiertage kommen nicht von selbst zurück.
+
+Die Liste gilt für alle Abteilungen gemeinsam. Rosenmontag usw. jedes Jahr neu übernehmen, da sich das Datum ändert.
+
+> **Bundesland wechseln:** Die unveränderten gesetzlichen Feiertage werden in allen bereits eingerichteten Jahren durch die des
+> neuen Bundeslandes ersetzt. Eigene, geänderte und arbeitsfreie Tage bleiben erhalten.
+
+### 3.9 Beispieldaten zum Ausprobieren
+
+*Verwaltung → Einstellungen → Beispieldaten → **Beispieldaten einfügen***
+
+Angelegt werden **zusätzlich** zu vorhandenen Daten:
+
+| Was | Inhalt |
+|---|---|
+| Abteilungen und Teams | *Beispiel Nord* und *Beispiel Süd* mit je *Meisterei 1* und *Meisterei 2* (gleichnamige Teams in zwei Abteilungen), *Beispiel Verwaltung* mit *Disposition* und *Werkstatt* |
+| Mitarbeiter | 20, mit Planeinträgen vom vorigen bis zum nächsten Monat: Schichtrhythmus F-F-S-S-N-N-frei-frei, Tagdienst, Homeoffice, Bereitschaft, Urlaub, Krankheit, Fortbildung, Notizen |
+| Beispielkonten (Passwort jeweils `demo1234`) | `demo.mitarbeiter`: darf das eigene Team bearbeiten<br>`demo.teamleitung`: verwaltet das eigene Team und bearbeitet ein Nachbarteam<br>`demo.leser`: nur ansehen, kein eigenes Team – sieht Krankmeldungen nur als „abwesend“ |
+
+Mit den Beispielkonten lässt sich gut ausprobieren, wie die Rechte wirken: zwei Browser (oder ein privates Fenster) öffnen und mit
+unterschiedlichen Konten anmelden. Änderungen erscheinen im jeweils anderen Fenster sofort.
+
+**Entfernen:** an derselben Stelle **Beispieldaten entfernen**. Gelöscht werden genau die Beispiel-Abteilungen, -Teams, -Mitarbeiter,
+ihre Planeinträge und die Beispielkonten; eigene Daten bleiben unverändert. Hast du einen eigenen Mitarbeiter in ein Beispiel-Team
+(oder ein eigenes Team in eine Beispiel-Abteilung) verschoben, bricht das Entfernen mit einem Hinweis ab, statt ihn mitzulöschen.
+
+Dasselbe geht über die Kommandozeile:
+
+```bash
+docker compose exec app node server/dist/cli.js demo           # einfügen
+docker compose exec app node server/dist/cli.js demo-remove    # entfernen
+```
+
+Nach dem Einfügen per Kommandozeile die Seite im Browser einmal neu laden.
+
+> Für den echten Betrieb die Beispielkonten nicht stehen lassen: Ihr Passwort ist öffentlich bekannt.
+
+### 3.10 Rückgängig, Protokoll und Drucken
+
+**Rückgängig (für alle Benutzer):** Nach jeder eigenen Änderung im Plan erscheint unten links eine Meldung, z. B.
+„U eingetragen · Becker, Anna · 11.–13.11.“, mit **↶ Rückgängig**. Mehrere Meldungen können gleichzeitig offen sein,
+jede lässt sich einzeln zurücknehmen und danach mit **↷ Wiederholen** wieder anwenden.
+
+- Ältere Änderungen der aktuellen Sitzung: Knopf **↶** oben rechts in der Kopfzeile.
+- Tastatur: **Strg+Z** nimmt die letzte Änderung zurück, **Strg+Y** wiederholt sie (Mac: ⌘).
+- Ein Pinselstrich über mehrere Tage oder Mitarbeiter ist **eine** Änderung und wird als Ganzes zurückgenommen.
+- Hat ein Kollege einen der Einträge inzwischen geändert, wird **nichts** zurückgenommen – die Meldung sagt, wer es war.
+  So überschreibt Rückgängig nie die Arbeit anderer.
+
+**Protokoll (Administratoren):** *Verwaltung → Protokoll* listet jede Änderung als eine Zeile in Klartext
+(„S eingetragen (statt K) · Hoffmann, David · So 15.11.“, „Mitarbeiter angelegt: …“, „Feiertag gelöscht: …“).
+Änderungen über mehrere Tage lassen sich mit **▸ Einzeländerungen** aufklappen. **Verlauf** öffnet den Verlauf der
+betroffenen Zelle wie im Kalender, **↶ Rückgängig** nimmt eine Planänderung zurück (auch die anderer Benutzer).
+Filter und Suche helfen beim Finden; ältere Einträge über *Ältere laden*.
+
+**Jahresübersicht drucken / als PDF:** im Jahreskalender
+
+- **🖨 Drucken** – Druckansicht auf A4 quer, ohne Bedienelemente. Im Druckdialog kann auch *Als PDF speichern* gewählt werden.
+- **⬇ PDF** – fertige PDF-Datei für den gewählten Mitarbeiter.
+- **⬇ PDF ganzes Team** – eine Datei mit einer Seite je Mitarbeiter des Teams.
+
+Die PDF enthält Dienste und Abwesenheiten in Farbe, Wochenenden, Feiertage und arbeitsfreie Tage, das Urlaubskonto und
+eine Auswertung je Eintragsart. Vertrauliche Arten (z. B. Krank) erscheinen wie im Browser nur für Berechtigte im Klartext.
 
 ---
 
@@ -281,6 +407,21 @@ git pull
 docker compose up -d --build
 docker image prune -f                # alte Images aufräumen
 ```
+
+Welche Version läuft und was sich geändert hat, steht unter *Verwaltung → Info* (Versionsnummer und Changelog).
+
+**Was die Benutzer nach einem Update sehen:**
+
+| Im Changelog der Version steht … | Mitarbeiter | Administratoren |
+|---|---|---|
+| nur technische Abschnitte (*Neu*, *Geändert*, *Behoben*) | nichts | gelbe Leiste „aktualisiert“ → Changelog |
+| ein Abschnitt **Für alle** | gelbe Leiste „Was ist neu?“ mit diesen Punkten, schließbar mit ✕ | ebenso |
+| ein Abschnitt **Wichtig** | beim nächsten Start ein Fenster, das nur mit **Verstanden** schließt | ebenso; unter *Verwaltung → Info* steht, wer schon bestätigt hat |
+
+Gelesen bzw. bestätigt wird am Benutzerkonto gespeichert (gilt auf allen Geräten, auch an gemeinsam genutzten PCs).
+Wer mehrere Updates verpasst hat, sieht die Neuigkeiten aller verpassten Versionen; neue Konten sehen keine alten.
+Über *Benutzermenü → Neuigkeiten* lassen sie sich jederzeit erneut aufrufen. Von außen prüfbar: `https://plan.example.de/api/health`
+liefert z. B. `{"ok":true,"version":"0.3.0"}`.
 
 Die Datenbank wird beim Start automatisch auf das neue Schema gebracht. Die Unterbrechung dauert nur wenige Sekunden;
 offene Browser verbinden sich selbst neu (der Punkt oben rechts ist kurz rot, dann wieder grün).
@@ -335,11 +476,12 @@ Eine Sicherung vom eigenen PC zurückspielen: erst mit `docker compose cp ./date
 
 ### 4.4 Passwort vergessen / ausgesperrt
 
-Ein Administrator setzt Passwörter normalerweise in der App zurück (*Benutzer bearbeiten → Neues Passwort*).
+Ein Administrator setzt Passwörter normalerweise in der App zurück (*Benutzer bearbeiten → Link zum Zurücksetzen*, siehe [3.5](#35-benutzer-und-rechte)).
 Ist kein Administrator mehr erreichbar, geht es über die Kommandozeile auf dem Server:
 
 ```bash
 docker compose exec app node server/dist/cli.js list-users
+docker compose exec -e PUBLIC_URL=https://plan.example.de app node server/dist/cli.js password-link admin   # Link zum Selbst-Festlegen
 docker compose exec app node server/dist/cli.js reset-password admin             # zufälliges Passwort
 docker compose exec app node server/dist/cli.js reset-password admin NeuesPw123  # festes Passwort
 docker compose exec app node server/dist/cli.js create-admin notfall-admin       # zusätzlichen Admin anlegen
@@ -413,6 +555,9 @@ Die Bezeichnungen im Cloudflare-Dashboard ändern sich gelegentlich ein wenig; d
    | Service → URL | `schichtplaner:3000` |
 
    Speichern. Den DNS-Eintrag für `plan.example.de` legt Cloudflare selbst an.
+
+   > **Nicht `localhost` eintragen.** cloudflared läuft hier in einem eigenen Container; `localhost` wäre der Container selbst,
+   > und Cloudflare meldet dann *Error 502*. Richtig ist immer `schichtplaner:3000` – auch wenn `APP_BIND` einen anderen Port hat.
 
 **2. `.env` einstellen**
 
@@ -680,7 +825,7 @@ Voraussetzung: [Node.js 22](https://nodejs.org/) (Windows, macOS oder Linux) und
 git clone https://github.com/wasserkasten/schichtplaner.git
 cd schichtplaner
 npm ci
-npm run seed      # optional: Demodaten, Logins admin / anna / ben, Passwort "demo1234"
+npm run seed      # optional: leere Datenbank mit Beispieldaten füllen, Logins admin, demo.mitarbeiter, demo.teamleitung, demo.leser – Passwort "demo1234"
 npm run dev       # startet API (Port 3000) und Oberfläche (Port 5173)
 ```
 
@@ -692,7 +837,7 @@ Dann <http://localhost:5173> öffnen. Änderungen am Code werden sofort übernom
 | Befehl | Zweck |
 |---|---|
 | `npm run dev` | Entwicklungsmodus mit automatischem Neuladen |
-| `npm run seed` | Demodaten in eine **leere** Datenbank schreiben |
+| `npm run seed` | **leere** Datenbank mit Administrator und Beispieldaten füllen (sonst: [3.9](#39-beispieldaten-zum-ausprobieren)) |
 | `npm test` | automatische Tests |
 | `npm run typecheck` | TypeScript-Prüfung |
 | `npm run build` + `npm start` | Produktionsbuild lokal starten → <http://localhost:3000> |
@@ -757,6 +902,9 @@ Aufruf: Docker `docker compose exec app node server/dist/cli.js <befehl>`, ohne 
 | `list-users` | alle Benutzer anzeigen |
 | `reset-password <benutzer> [passwort]` | Passwort setzen, Benutzer aktivieren, alle Sitzungen beenden |
 | `create-admin <benutzer> [passwort]` | zusätzlichen Administrator anlegen |
+| `password-link <benutzer>` | Link erzeugen, über den der Benutzer sein Passwort selbst festlegt (`PUBLIC_URL` = Adresse der App) |
+| `demo` | [Beispieldaten](#39-beispieldaten-zum-ausprobieren) einfügen |
+| `demo-remove` | Beispieldaten wieder vollständig entfernen |
 
 ### 9.5 Netzwerk
 
@@ -783,9 +931,12 @@ Health-Check für Monitoring (z. B. Uptime Kuma): `https://plan.example.de/api/h
 | `docker compose up` meldet `Bind for 0.0.0.0:3000 failed: port is already allocated` | Port 3000 ist schon belegt (z. B. durch Dockhand). In `.env` `APP_BIND=127.0.0.1:3001` setzen, siehe [Port ändern](#port-ändern) |
 | `docker compose up` meldet `port is already allocated` für Port 80 oder 443 | Port 80/443 ist schon belegt (z. B. Apache/nginx). Den Dienst beenden, [Cloudflare Tunnel](#5-variante-cloudflare-tunnel) nutzen oder [Kapitel 6](#6-variante-bereits-vorhandener-reverse-proxy-nginx-traefik) |
 | cloudflared startet ständig neu, Log: `Provided Tunnel token is not valid` | `CLOUDFLARE_TUNNEL_TOKEN` fehlt oder ist unvollständig kopiert (es ist sehr lang und beginnt mit `eyJ`) |
-| Cloudflare zeigt **Error 502 / Bad Gateway** | Der Tunnel läuft, erreicht aber die App nicht. In der Route muss Type `HTTP` und URL `schichtplaner:3000` stehen (nicht `https`, nicht `localhost`). Bei einem vorhandenen cloudflared-Container prüfen, ob er im Netz `schichtplaner` ist ([5.3](#53-variante-b-vorhandenen-tunnel-nutzen)) |
+| Cloudflare zeigt **Error 502 / Bad Gateway** | Der Tunnel läuft, erreicht aber die App nicht. Ursache zeigt `docker compose logs cloudflared \| grep -i error`: `dial tcp [::1]:…` bzw. `127.0.0.1` → Route zeigt auf `localhost`; `first record does not look like a TLS handshake` → Typ steht auf `HTTPS`; `no such host` → cloudflared ist nicht im Netz `schichtplaner`. In der Route muss Type `HTTP` und URL `schichtplaner:3000` stehen. Bei einem vorhandenen cloudflared-Container prüfen, ob er im Netz `schichtplaner` ist ([5.3](#53-variante-b-vorhandenen-tunnel-nutzen)) |
 | Cloudflare zeigt **Error 1033** | Für diese Domain ist kein laufender Tunnel verbunden: `docker compose logs cloudflared` prüfen |
 | Cloudflare-Fehler 502 **nur manchmal** | Dasselbe Tunnel-Token läuft in zwei cloudflared-Containern; für Schichtplaner einen eigenen Tunnel anlegen ([Kapitel 5](#5-variante-cloudflare-tunnel)) |
+| Build bricht ab mit `Cannot find native binding` bzw. `Cannot find module '@rolldown/binding-…'` | npm hat beim Installieren ein optionales Paket übersprungen (meist ein kurzer Netzwerkfehler), und Docker hat diesen unvollständigen Stand zwischengespeichert. Die aktuelle Version erkennt das beim Bauen selbst und installiert neu. Bei einem älteren Stand oder falls es trotzdem auftritt: `git pull`, dann `docker compose build --no-cache app && docker compose up -d` |
+| Build meldet `FEHLT: …` und `Binärdatei(en) fehlen` | Auch der zweite Installationsversuch war unvollständig. Netzwerk des Servers prüfen (`curl -I https://registry.npmjs.org`), freien Speicher prüfen (`df -h`), dann erneut bauen. Die Zeile `Plattform: …` zeigt, für welches System gebaut wird |
+| `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock` | Der Benutzer ist nicht in der Gruppe `docker`, oder er hat sich danach noch nicht neu angemeldet. `sudo usermod -aG docker $USER`, abmelden und per SSH neu anmelden (prüfen mit `groups`). Alternativ jedem Docker-Befehl `sudo` voranstellen |
 | `app` ist `unhealthy` | `docker compose logs app` lesen; häufig ist der Speicher voll (`df -h`) |
 | Nach einem Update fehlen neue Funktionen im Browser | Die App aktualisiert sich als PWA beim nächsten Laden selbst; notfalls einmal Strg+F5 |
 | `npm ci` meldet `node-gyp`/Python-Fehler | Die Projektdatei `.npmrc` (mit `ignore-scripts=true`) fehlt oder wird übergangen. Sie muss im Projektordner liegen; die benötigten Binärdateien bringt `better-sqlite3` für Linux, macOS und Windows (x64/ARM64) mit. Auf anderen Plattformen (z. B. 32-Bit-ARM) muss es mit `npm rebuild better-sqlite3 --ignore-scripts=false` kompiliert werden (braucht Python und C++-Compiler) |
@@ -801,4 +952,5 @@ Health-Check für Monitoring (z. B. Uptime Kuma): `https://plan.example.de/api/h
 - [ ] Automatische Sicherheitsupdates des Servers (`sudo apt install unattended-upgrades`)
 - [ ] Backups werden regelmäßig **vom Server weg** kopiert, und eine Wiederherstellung wurde einmal ausprobiert
 - [ ] Ausgeschiedene Mitarbeiter: Benutzer auf *inaktiv*, Mitarbeiter auf *inaktiv*
+- [ ] Beispieldaten entfernt (*Verwaltung → Einstellungen*), damit keine Konten mit bekanntem Passwort bestehen
 - [ ] Freigabe von Arbeitgeber, Betriebsrat und Datenschutz liegt vor ([Konzept, Kapitel 7](KONZEPT.md#7-wichtig-vor-einem-echten-einsatz))

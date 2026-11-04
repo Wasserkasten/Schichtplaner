@@ -1,23 +1,30 @@
 import { useEffect, useState } from 'react';
-import { del, get, post, put } from '../api';
+import { api, del, get, post, put } from '../api';
 import { store, useStore } from '../store';
-import { fullName, reportError } from '../helpers';
+import { departmentName, fullName, reportError, sortedTeams, teamLabel, teamsByDepartment } from '../helpers';
 import type { Employee, EntryType, Level } from '../types';
 import { Modal } from '../components/Modal';
+import { HolidayAdmin } from './HolidayAdmin';
+import { PasswordLinkDialog, randomPassword, usernameSuggestion, type LinkInfo, type SupportContact } from '../components/PasswordLink';
+import { AuditLog } from './AuditLog';
+import { InfoView } from './InfoView';
 
-type Tab = 'employees' | 'structure' | 'users' | 'types' | 'settings' | 'audit';
+export type AdminTab = 'employees' | 'structure' | 'users' | 'types' | 'holidays' | 'settings' | 'audit' | 'info';
+type Tab = AdminTab;
 
-export function AdminView() {
+export function AdminView({ initialTab = 'employees' }: { initialTab?: AdminTab }) {
   const { boot } = useStore();
   const isAdmin = boot!.me.isAdmin;
-  const [tab, setTab] = useState<Tab>('employees');
+  const [tab, setTab] = useState<Tab>(initialTab);
   const tabs: [Tab, string, boolean][] = [
     ['employees', 'Mitarbeiter', true],
     ['structure', 'Abteilungen & Teams', isAdmin],
     ['users', 'Benutzer & Rechte', isAdmin],
     ['types', 'An-/Abwesenheitsarten', isAdmin],
+    ['holidays', 'Feiertage', isAdmin],
     ['settings', 'Einstellungen', isAdmin],
     ['audit', 'Protokoll', isAdmin],
+    ['info', 'Info', isAdmin],
   ];
   return (
     <div className="admin">
@@ -32,8 +39,16 @@ export function AdminView() {
       {tab === 'structure' && <Structure />}
       {tab === 'users' && <Users />}
       {tab === 'types' && <Types />}
-      {tab === 'settings' && <Settings />}
-      {tab === 'audit' && <Audit />}
+      {tab === 'holidays' && <HolidayAdmin stateName={(c) => STATES[c] ?? c} />}
+      {tab === 'settings' && (
+        <>
+          <Settings />
+          <SupportContactSettings />
+          <DemoData />
+        </>
+      )}
+      {tab === 'audit' && <AuditLog />}
+      {tab === 'info' && <InfoView />}
     </div>
   );
 }
@@ -51,11 +66,23 @@ async function run(fn: () => Promise<unknown>, ok = 'Gespeichert') {
 }
 
 // ---------------- Mitarbeiter ----------------
+interface AccountRow { id: number; username: string; displayName: string; employeeId: number | null; pendingLink: { purpose: string; expiresAt: string } | null }
+interface LinkResult { displayName: string; username: string; link: LinkInfo }
+
 function Employees() {
   const { boot } = useStore();
+  const isAdmin = boot!.me.isAdmin;
   const manageable = boot!.teams.filter((t) => t.level === 'manage');
   const [edit, setEdit] = useState<Partial<Employee> | null>(null);
   const [showInactive, setShowInactive] = useState(false);
+  const [accounts, setAccounts] = useState<AccountRow[]>([]);
+  const [newAccount, setNewAccount] = useState<Employee | null>(null);
+  const [linkResult, setLinkResult] = useState<LinkResult | null>(null);
+  const loadAccounts = () => isAdmin && get<AccountRow[]>('/api/admin/users').then(setAccounts, reportError);
+  useEffect(() => void loadAccounts(), []);
+  const accountOf = new Map(accounts.filter((a) => a.employeeId).map((a) => [a.employeeId!, a]));
+  const teamOrder = new Map(sortedTeams(boot!).map((t, i) => [t.id, i]));
+  const withoutAccount = boot!.employees.filter((e) => e.active && !accountOf.has(e.id)).length;
   return (
     <div>
       <div className="toolbar">
@@ -63,46 +90,137 @@ function Employees() {
           + Mitarbeiter
         </button>
         <label><input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /> inaktive anzeigen</label>
+        {isAdmin && withoutAccount > 0 && <span className="muted small">{withoutAccount} aktive Mitarbeiter ohne Benutzerkonto</span>}
       </div>
       <table className="simple">
-        <thead><tr><th>Name</th><th>Kürzel</th><th>Team</th><th>Pers.-Nr.</th><th>Urlaub/Jahr</th><th /></tr></thead>
+        <thead><tr><th>Name</th><th>Kürzel</th><th>Abteilung</th><th>Team</th><th>Pers.-Nr.</th><th>Urlaub/Jahr</th>{isAdmin && <th>Konto</th>}<th /></tr></thead>
         <tbody>
           {boot!.employees
             .filter((e) => showInactive || e.active)
+            .sort((a, b) => (teamOrder.get(a.teamId) ?? 0) - (teamOrder.get(b.teamId) ?? 0) || a.sortOrder - b.sortOrder || fullName(a).localeCompare(fullName(b), 'de'))
             .map((e) => {
               const team = boot!.teams.find((t) => t.id === e.teamId);
+              const acc = accountOf.get(e.id);
               return (
                 <tr key={e.id} className={e.active ? '' : 'inactive'}>
                   <td>{fullName(e)}</td>
                   <td>{e.shortName}</td>
+                  <td>{team ? departmentName(boot!, team.departmentId) : ''}</td>
                   <td>{team?.name}</td>
                   <td>{e.personnelNo}</td>
                   <td>{e.vacationDaysPerYear}</td>
+                  {isAdmin && (
+                    <td>
+                      {acc ? (
+                        <>
+                          <code>{acc.username}</code>
+                          {acc.pendingLink && <span className="badge light" title={`Link gültig bis ${new Date(acc.pendingLink.expiresAt).toLocaleString('de-DE')}`}>{acc.pendingLink.purpose === 'setup' ? 'Einrichtung offen' : 'Zurücksetzen offen'}</span>}
+                        </>
+                      ) : (
+                        e.active && <button onClick={() => setNewAccount(e)}>+ Konto</button>
+                      )}
+                    </td>
+                  )}
                   <td>{team?.level === 'manage' && <button onClick={() => setEdit(e)}>Bearbeiten</button>}</td>
                 </tr>
               );
             })}
         </tbody>
       </table>
-      {edit && <EmployeeForm value={edit} onClose={() => setEdit(null)} />}
+      {edit && (
+        <EmployeeForm
+          value={edit}
+          onClose={(res) => {
+            setEdit(null);
+            if (res) setLinkResult(res);
+            void loadAccounts();
+          }}
+        />
+      )}
+      {newAccount && (
+        <AccountForEmployee
+          emp={newAccount}
+          taken={new Set(accounts.map((a) => a.username.toLowerCase()))}
+          onClose={(res) => {
+            setNewAccount(null);
+            if (res) setLinkResult(res);
+            void loadAccounts();
+          }}
+        />
+      )}
+      {linkResult && <PasswordLinkDialog {...linkResult} onClose={() => setLinkResult(null)} />}
     </div>
   );
 }
 
-function EmployeeForm({ value, onClose }: { value: Partial<Employee>; onClose: () => void }) {
+/** Benutzername aus Vor- und Nachname vorschlagen; bei Bedarf mit Zahl, falls schon vergeben. */
+function freeUsername(first: string, last: string, taken: Set<string>): string {
+  const base = usernameSuggestion(first, last);
+  if (!base || !taken.has(base)) return base;
+  for (let i = 2; ; i++) if (!taken.has(`${base}${i}`)) return `${base}${i}`;
+}
+
+/** Kurzdialog „Konto anlegen“ für einen vorhandenen Mitarbeiter. */
+function AccountForEmployee({ emp, taken, onClose }: { emp: Employee; taken: Set<string>; onClose: (r?: LinkResult) => void }) {
+  const [username, setUsername] = useState(() => freeUsername(emp.firstName, emp.lastName, taken));
+  const displayName = `${emp.firstName} ${emp.lastName}`;
+  async function save() {
+    try {
+      const r = await post<{ id: number; link: LinkInfo }>('/api/admin/users', { username, displayName, employeeId: emp.id, grants: [] });
+      await store.loadBootstrap();
+      onClose({ displayName, username, link: r.link });
+    } catch (e) {
+      reportError(e);
+    }
+  }
+  return (
+    <Modal title={`Konto für ${fullName(emp)}`} onClose={() => onClose()}>
+      <div className="form">
+        <label>Benutzername<input value={username} onChange={(e) => setUsername(e.target.value)} /></label>
+        <p className="small muted">Das Konto bekommt die üblichen Rechte (eigenes Team bearbeiten). Das Passwort legt {emp.firstName} über einen Link selbst fest.</p>
+      </div>
+      <div className="actions"><button className="primary" disabled={username.trim().length < 2} onClick={() => void save()}>Konto anlegen</button></div>
+    </Modal>
+  );
+}
+
+function EmployeeForm({ value, onClose }: { value: Partial<Employee>; onClose: (r?: LinkResult) => void }) {
   const { boot } = useStore();
+  const isAdmin = boot!.me.isAdmin;
   const [v, setV] = useState(value);
+  const [withAccount, setWithAccount] = useState(!value.id && isAdmin);
+  const [username, setUsername] = useState('');
+  const [usernameTouched, setUsernameTouched] = useState(false);
   const set = (k: keyof Employee, val: unknown) => setV({ ...v, [k]: val });
+  // Benutzername folgt dem Namen, bis er von Hand geändert wurde
+  useEffect(() => {
+    if (!usernameTouched) setUsername(usernameSuggestion(v.firstName ?? '', v.lastName ?? ''));
+  }, [v.firstName, v.lastName, usernameTouched]);
+
   async function save() {
     const body = { ...v, shortName: v.shortName || null, personnelNo: v.personnelNo || null };
-    if (await run(() => (v.id ? put(`/api/admin/employees/${v.id}`, body) : post('/api/admin/employees', body)))) onClose();
+    if (v.id) {
+      if (await run(() => put(`/api/admin/employees/${v.id}`, body))) onClose();
+      return;
+    }
+    try {
+      const r = await post<{ id: number; account?: { username: string; link: LinkInfo | null } }>('/api/admin/employees', {
+        ...body,
+        account: withAccount ? { username: username.trim() } : undefined,
+      });
+      await store.loadBootstrap();
+      store.toast(r.account ? 'Mitarbeiter und Konto angelegt' : 'Mitarbeiter angelegt');
+      onClose(r.account?.link ? { displayName: `${v.firstName} ${v.lastName}`, username: r.account.username, link: r.account.link } : undefined);
+    } catch (e) {
+      reportError(e);
+    }
   }
   async function remove() {
     if (!confirm('Mitarbeiter endgültig löschen? Alle Planeinträge gehen verloren. Besser: auf „inaktiv“ setzen.')) return;
     if (await run(() => del(`/api/admin/employees/${v.id}`), 'Gelöscht')) onClose();
   }
   return (
-    <Modal title={v.id ? 'Mitarbeiter bearbeiten' : 'Neuer Mitarbeiter'} onClose={onClose}>
+    <Modal title={v.id ? 'Mitarbeiter bearbeiten' : 'Neuer Mitarbeiter'} onClose={() => onClose()}>
       <div className="form grid2">
         <label>Vorname<input value={v.firstName ?? ''} onChange={(e) => set('firstName', e.target.value)} /></label>
         <label>Nachname<input value={v.lastName ?? ''} onChange={(e) => set('lastName', e.target.value)} /></label>
@@ -110,16 +228,34 @@ function EmployeeForm({ value, onClose }: { value: Partial<Employee>; onClose: (
         <label>Personalnummer<input value={v.personnelNo ?? ''} onChange={(e) => set('personnelNo', e.target.value)} /></label>
         <label>Team
           <select value={v.teamId} onChange={(e) => set('teamId', Number(e.target.value))}>
-            {boot!.teams.filter((t) => t.level === 'manage').map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            {teamsByDepartment(boot!, (t) => t.level === 'manage').map(({ department, teams }) => (
+              <optgroup key={department.id} label={department.name}>
+                {teams.map((t) => <option key={t.id} value={t.id}>{department.name} · {t.name}</option>)}
+              </optgroup>
+            ))}
           </select>
         </label>
         <label>Urlaubstage/Jahr<input type="number" min={0} value={v.vacationDaysPerYear ?? 30} onChange={(e) => set('vacationDaysPerYear', Number(e.target.value))} /></label>
         <label>Sortierung<input type="number" value={v.sortOrder ?? 0} onChange={(e) => set('sortOrder', Number(e.target.value))} /></label>
         <label className="inline"><input type="checkbox" checked={v.active ?? true} onChange={(e) => set('active', e.target.checked)} /> aktiv</label>
       </div>
+      {!v.id && isAdmin && (
+        <div className="form sub-form">
+          <label className="inline"><input type="checkbox" checked={withAccount} onChange={(e) => setWithAccount(e.target.checked)} /> Benutzerkonto gleich mit anlegen</label>
+          {withAccount && (
+            <>
+              <label>Benutzername<input value={username} onChange={(e) => { setUsername(e.target.value); setUsernameTouched(true); }} /></label>
+              <p className="small muted">
+                Danach bekommst du einen Link (mit QR-Code zum Ausdrucken), über den das Passwort selbst festgelegt wird.
+                {v.personnelNo ? ' Zur Bestätigung wird die Personalnummer abgefragt.' : v.shortName ? ' Zur Bestätigung wird das Kürzel abgefragt.' : ' Tipp: Personalnummer oder Kürzel eintragen – sie wird beim Öffnen des Links zur Bestätigung abgefragt.'}
+              </p>
+            </>
+          )}
+        </div>
+      )}
       <div className="actions">
         {v.id && boot!.me.isAdmin && <button className="danger" onClick={() => void remove()}>Löschen</button>}
-        <button className="primary" disabled={!v.firstName || !v.lastName} onClick={() => void save()}>Speichern</button>
+        <button className="primary" disabled={!v.firstName || !v.lastName || (withAccount && username.trim().length < 2)} onClick={() => void save()}>Speichern</button>
       </div>
     </Modal>
   );
@@ -165,7 +301,7 @@ function Structure() {
 
 // ---------------- Benutzer & Rechte ----------------
 interface Grant { scope: 'team' | 'department' | 'all'; scopeId: number | null; level: Exclude<Level, 'none'> }
-interface AdminUser { id?: number; username: string; displayName: string; employeeId: number | null; isAdmin: boolean; active: boolean; password?: string; grants: Grant[] }
+interface AdminUser { id?: number; username: string; displayName: string; employeeId: number | null; isAdmin: boolean; active: boolean; password?: string; grants: Grant[]; pendingLink?: { purpose: string; expiresAt: string } | null }
 
 const LEVEL_LABEL: Record<string, string> = { view: 'ansehen', edit: 'bearbeiten', manage: 'verwalten' };
 
@@ -173,10 +309,11 @@ function Users() {
   const { boot } = useStore();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [edit, setEdit] = useState<AdminUser | null>(null);
+  const [linkResult, setLinkResult] = useState<LinkResult | null>(null);
   const load = () => get<AdminUser[]>('/api/admin/users').then(setUsers, reportError);
   useEffect(() => void load(), []);
   const scopeName = (g: Grant) =>
-    g.scope === 'all' ? 'alle Teams' : g.scope === 'department' ? `Abt. ${boot!.departments.find((d) => d.id === g.scopeId)?.name}` : boot!.teams.find((t) => t.id === g.scopeId)?.name;
+    g.scope === 'all' ? 'alle Teams' : g.scope === 'department' ? `Abt. ${boot!.departments.find((d) => d.id === g.scopeId)?.name}` : teamLabel(boot!, g.scopeId!);
   return (
     <div>
       <div className="toolbar">
@@ -190,7 +327,14 @@ function Users() {
             const emp = boot!.employees.find((e) => e.id === u.employeeId);
             return (
               <tr key={u.id} className={u.active ? '' : 'inactive'}>
-                <td>{u.username}</td>
+                <td>
+                  {u.username}
+                  {u.pendingLink && (
+                    <span className="badge light" title={`Link gültig bis ${new Date(u.pendingLink.expiresAt).toLocaleString('de-DE')}`}>
+                      {u.pendingLink.purpose === 'setup' ? 'Einrichtung offen' : 'Zurücksetzen offen'}
+                    </span>
+                  )}
+                </td>
                 <td>{u.displayName}</td>
                 <td>{emp ? fullName(emp) : '–'}</td>
                 <td>
@@ -203,36 +347,178 @@ function Users() {
           })}
         </tbody>
       </table>
-      {edit && <UserForm value={edit} onClose={() => { setEdit(null); void load(); }} />}
+      {edit && (
+        <UserForm
+          value={edit}
+          users={users}
+          onClose={(res) => {
+            setEdit(null);
+            if (res) setLinkResult(res);
+            void load();
+          }}
+        />
+      )}
+      {linkResult && <PasswordLinkDialog {...linkResult} onClose={() => setLinkResult(null)} />}
     </div>
   );
 }
 
-function UserForm({ value, onClose }: { value: AdminUser; onClose: () => void }) {
+interface NewEmployee { firstName: string; lastName: string; teamId: number; shortName: string; personnelNo: string }
+
+/** Passwortfeld mit „Zufällig erzeugen“ (Klartext, damit es abgeschrieben bzw. kopiert werden kann). */
+function PasswordInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="pw-row">
+      <input type={visible ? 'text' : 'password'} autoComplete="new-password" value={value} onChange={(e) => onChange(e.target.value)} placeholder="mind. 8 Zeichen" />
+      <button type="button" title="Zufälliges Passwort erzeugen" onClick={() => { onChange(randomPassword()); setVisible(true); }}>🎲 Zufällig</button>
+      {value && <button type="button" onClick={() => void navigator.clipboard?.writeText(value).then(() => store.toast('Kopiert'))}>Kopieren</button>}
+    </div>
+  );
+}
+
+function UserForm({ value, users, onClose }: { value: AdminUser; users: AdminUser[]; onClose: (r?: LinkResult) => void }) {
   const { boot } = useStore();
   const [v, setV] = useState<AdminUser>({ ...value, password: '' });
+  const [empMode, setEmpMode] = useState<'existing' | 'new'>('existing');
+  const firstTeam = sortedTeams(boot!)[0]?.id ?? 0;
+  const [ne, setNe] = useState<NewEmployee>({ firstName: '', lastName: '', teamId: firstTeam, shortName: '', personnelNo: '' });
+  const [pwMode, setPwMode] = useState<'link' | 'manual' | 'keep'>(value.id ? 'keep' : 'link');
+  const [touched, setTouched] = useState({ username: !!value.id, displayName: !!value.id });
   const setGrant = (i: number, g: Partial<Grant>) => setV({ ...v, grants: v.grants.map((x, j) => (i === j ? { ...x, ...g } : x)) });
-  async function save() {
-    const body = { ...v, password: v.password || undefined };
-    if (await run(() => (v.id ? put(`/api/admin/users/${v.id}`, body) : post('/api/admin/users', body)))) onClose();
+  const linkedTo = new Map(users.filter((u) => u.employeeId && u.id !== v.id).map((u) => [u.employeeId!, u.username]));
+  const taken = new Set(users.filter((u) => u.id !== v.id).map((u) => u.username.toLowerCase()));
+
+  // Benutzer- und Anzeigename aus dem (neuen oder gewählten) Mitarbeiter vorschlagen, solange nicht von Hand geändert
+  function suggestFrom(first: string, last: string, next: Partial<AdminUser> = {}) {
+    setV((cur) => ({
+      ...cur,
+      ...next,
+      username: touched.username ? cur.username : freeUsername(first, last, taken),
+      displayName: touched.displayName ? cur.displayName : [first, last].filter(Boolean).join(' '),
+    }));
   }
+  const setNew = (p: Partial<NewEmployee>) => {
+    const n = { ...ne, ...p };
+    setNe(n);
+    suggestFrom(n.firstName, n.lastName);
+  };
+
+  async function save() {
+    const password = pwMode === 'manual' ? v.password : undefined;
+    const body = {
+      ...v,
+      password,
+      employeeId: empMode === 'new' ? null : v.employeeId,
+      newEmployee: empMode === 'new' ? { ...ne, shortName: ne.shortName || null, personnelNo: ne.personnelNo || null } : undefined,
+    };
+    try {
+      if (v.id) {
+        await put(`/api/admin/users/${v.id}`, body);
+        await store.loadBootstrap();
+        store.toast('Gespeichert');
+        onClose();
+      } else {
+        const r = await post<{ id: number; link: LinkInfo | null }>('/api/admin/users', body);
+        await store.loadBootstrap();
+        store.toast('Benutzer angelegt');
+        onClose(r.link ? { displayName: v.displayName, username: v.username, link: r.link } : undefined);
+      }
+    } catch (e) {
+      reportError(e);
+    }
+  }
+
+  async function resetLink() {
+    try {
+      const r = await post<{ username: string; displayName: string; link: LinkInfo }>(`/api/admin/users/${v.id}/password-link`, { purpose: 'reset' });
+      onClose({ displayName: r.displayName, username: r.username, link: r.link });
+    } catch (e) {
+      reportError(e);
+    }
+  }
+
+  const pwOk = pwMode !== 'manual' || (v.password ?? '').length >= 8;
+  const empOk = empMode === 'existing' || (ne.firstName.trim() && ne.lastName.trim() && ne.teamId);
   return (
-    <Modal title={v.id ? 'Benutzer bearbeiten' : 'Neuer Benutzer'} onClose={onClose} wide>
+    <Modal title={v.id ? 'Benutzer bearbeiten' : 'Neuer Benutzer'} onClose={() => onClose()} wide>
+      <h3 style={{ marginTop: 0 }}>Mitarbeiter</h3>
+      {!v.id && (
+        <div className="radio-list">
+          <label><input type="radio" checked={empMode === 'existing'} onChange={() => setEmpMode('existing')} /> vorhandenen Mitarbeiter verknüpfen (oder keinen)</label>
+          <label><input type="radio" checked={empMode === 'new'} onChange={() => setEmpMode('new')} /> neuen Mitarbeiter gleich mit anlegen</label>
+        </div>
+      )}
+      {empMode === 'existing' ? (
+        <div className="form">
+          <label>Verknüpfter Mitarbeiter
+            <select
+              value={v.employeeId ?? ''}
+              onChange={(e) => {
+                const id = e.target.value ? Number(e.target.value) : null;
+                const emp = boot!.employees.find((x) => x.id === id);
+                if (emp && !v.id) suggestFrom(emp.firstName, emp.lastName, { employeeId: id });
+                else setV({ ...v, employeeId: id });
+              }}
+            >
+              <option value="">– keiner (z. B. Personalabteilung) –</option>
+              {sortedTeams(boot!).map((t) => (
+                <optgroup key={t.id} label={teamLabel(boot!, t.id)}>
+                  {boot!.employees.filter((e) => e.teamId === t.id && e.active).map((e) => (
+                    <option key={e.id} value={e.id} disabled={linkedTo.has(e.id)}>
+                      {fullName(e)}{linkedTo.has(e.id) ? ` – hat schon Konto „${linkedTo.get(e.id)}“` : ''}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+        </div>
+      ) : (
+        <div className="form grid2 sub-form">
+          <label>Vorname<input value={ne.firstName} onChange={(e) => setNew({ firstName: e.target.value })} /></label>
+          <label>Nachname<input value={ne.lastName} onChange={(e) => setNew({ lastName: e.target.value })} /></label>
+          <label>Team
+            <select value={ne.teamId} onChange={(e) => setNew({ teamId: Number(e.target.value) })}>
+              {teamsByDepartment(boot!).map(({ department, teams }) => (
+                <optgroup key={department.id} label={department.name}>
+                  {teams.map((t) => <option key={t.id} value={t.id}>{department.name} · {t.name}</option>)}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+          <label>Kürzel<input value={ne.shortName} maxLength={10} onChange={(e) => setNew({ shortName: e.target.value })} /></label>
+          <label>Personalnummer<input value={ne.personnelNo} onChange={(e) => setNew({ personnelNo: e.target.value })} /></label>
+        </div>
+      )}
+
+      <h3>Konto</h3>
       <div className="form grid2">
-        <label>Benutzername<input value={v.username} onChange={(e) => setV({ ...v, username: e.target.value })} /></label>
-        <label>Anzeigename<input value={v.displayName} onChange={(e) => setV({ ...v, displayName: e.target.value })} /></label>
-        <label>Verknüpfter Mitarbeiter
-          <select value={v.employeeId ?? ''} onChange={(e) => setV({ ...v, employeeId: e.target.value ? Number(e.target.value) : null })}>
-            <option value="">– keiner –</option>
-            {boot!.employees.map((e) => <option key={e.id} value={e.id}>{fullName(e)}</option>)}
-          </select>
-        </label>
-        <label>{v.id ? 'Neues Passwort (leer = unverändert)' : 'Startpasswort'}
-          <input type="password" autoComplete="new-password" value={v.password} onChange={(e) => setV({ ...v, password: e.target.value })} />
-        </label>
+        <label>Benutzername<input value={v.username} onChange={(e) => { setTouched({ ...touched, username: true }); setV({ ...v, username: e.target.value }); }} /></label>
+        <label>Anzeigename<input value={v.displayName} onChange={(e) => { setTouched({ ...touched, displayName: true }); setV({ ...v, displayName: e.target.value }); }} /></label>
         <label className="inline"><input type="checkbox" checked={v.isAdmin} onChange={(e) => setV({ ...v, isAdmin: e.target.checked })} /> Administrator</label>
         <label className="inline"><input type="checkbox" checked={v.active} onChange={(e) => setV({ ...v, active: e.target.checked })} /> aktiv</label>
       </div>
+
+      <h3>Passwort</h3>
+      <div className="radio-list">
+        {v.id && <label><input type="radio" checked={pwMode === 'keep'} onChange={() => setPwMode('keep')} /> unverändert lassen</label>}
+        {!v.id && (
+          <label>
+            <input type="radio" checked={pwMode === 'link'} onChange={() => setPwMode('link')} />
+            <span><strong>Einrichtungslink</strong> (empfohlen) – der Benutzer legt sein Passwort selbst fest; du bekommst einen Link mit QR-Code zum Weitergeben</span>
+          </label>
+        )}
+        <label><input type="radio" checked={pwMode === 'manual'} onChange={() => setPwMode('manual')} /> {v.id ? 'neues Passwort festlegen' : 'Startpasswort selbst festlegen'} (muss bei der ersten Anmeldung geändert werden)</label>
+      </div>
+      {pwMode === 'manual' && <PasswordInput value={v.password ?? ''} onChange={(p) => setV({ ...v, password: p })} />}
+      {v.id && (
+        <p className="small">
+          <button onClick={() => void resetLink()}>🔗 Link zum Zurücksetzen erstellen</button>{' '}
+          <span className="muted">– der Benutzer legt damit selbst ein neues Passwort fest; ein früherer Link wird ungültig.</span>
+        </p>
+      )}
+
       <h3>Zusätzliche Berechtigungen</h3>
       <p className="muted small">„ansehen“ = Plan lesen · „bearbeiten“ = Einträge ändern · „verwalten“ = zusätzlich Mitarbeiter anlegen/ändern</p>
       {v.grants.map((g, i) => (
@@ -245,7 +531,13 @@ function UserForm({ value, onClose }: { value: AdminUser; onClose: () => void })
           {g.scope !== 'all' && (
             <select value={g.scopeId ?? ''} onChange={(e) => setGrant(i, { scopeId: Number(e.target.value) })}>
               <option value="">– wählen –</option>
-              {(g.scope === 'team' ? boot!.teams : boot!.departments).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+              {g.scope === 'team'
+                ? teamsByDepartment(boot!).map(({ department, teams }) => (
+                    <optgroup key={department.id} label={department.name}>
+                      {teams.map((t) => <option key={t.id} value={t.id}>{department.name} · {t.name}</option>)}
+                    </optgroup>
+                  ))
+                : boot!.departments.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
             </select>
           )}
           <select value={g.level} onChange={(e) => setGrant(i, { level: e.target.value as Grant['level'] })}>
@@ -256,7 +548,9 @@ function UserForm({ value, onClose }: { value: AdminUser; onClose: () => void })
       ))}
       <button onClick={() => setV({ ...v, grants: [...v.grants, { scope: 'team', scopeId: null, level: 'edit' }] })}>+ Berechtigung</button>
       <div className="actions">
-        <button className="primary" disabled={!v.username || !v.displayName || (!v.id && (v.password ?? '').length < 8)} onClick={() => void save()}>Speichern</button>
+        <button className="primary" disabled={!v.username || !v.displayName || !pwOk || !empOk} onClick={() => void save()}>
+          {!v.id && pwMode === 'link' ? 'Anlegen und Link erzeugen' : 'Speichern'}
+        </button>
       </div>
     </Modal>
   );
@@ -329,6 +623,28 @@ const STATES: Record<string, string> = {
   BW: 'Baden-Württemberg', BY: 'Bayern', BE: 'Berlin', BB: 'Brandenburg', HB: 'Bremen', HH: 'Hamburg', HE: 'Hessen', MV: 'Mecklenburg-Vorpommern',
   NI: 'Niedersachsen', NW: 'Nordrhein-Westfalen', RP: 'Rheinland-Pfalz', SL: 'Saarland', SN: 'Sachsen', ST: 'Sachsen-Anhalt', SH: 'Schleswig-Holstein', TH: 'Thüringen',
 };
+/** Ansprechpartner bei Anmeldeproblemen: erscheint auf der Anmeldeseite, bei abgelaufenen Links und im Zugangsschreiben. */
+function SupportContactSettings() {
+  const [c, setC] = useState<SupportContact | null>(null);
+  useEffect(() => void get<SupportContact>('/api/admin/support-contact').then(setC, reportError), []);
+  if (!c) return null;
+  const set = (k: keyof SupportContact, v: string) => setC({ ...c, [k]: v });
+  return (
+    <div className="form card narrow support-settings">
+      <h3 style={{ margin: 0 }}>Hilfe bei Anmeldeproblemen</h3>
+      <p className="small muted" style={{ margin: 0 }}>
+        An wen sich Kollegen wenden, wenn sie ihr Passwort vergessen haben oder ein Link abgelaufen ist. Erscheint auf der Anmeldeseite
+        (<strong>öffentlich sichtbar</strong>), auf abgelaufenen Links und im Zugangsschreiben. Alle Felder sind optional.
+      </p>
+      <label>Name bzw. Stelle<input value={c.name} placeholder="z. B. Leitstelle – Frau Schmidt" onChange={(e) => set('name', e.target.value)} /></label>
+      <label>Telefon<input value={c.phone} placeholder="z. B. Durchwahl 123" onChange={(e) => set('phone', e.target.value)} /></label>
+      <label>E-Mail<input type="email" value={c.email} onChange={(e) => set('email', e.target.value)} /></label>
+      <label>Hinweis<input value={c.note} placeholder="z. B. Mo–Fr 7–15 Uhr oder persönlich im Büro 2.14" onChange={(e) => set('note', e.target.value)} /></label>
+      <button className="primary" onClick={() => void run(() => put('/api/admin/support-contact', c))}>Speichern</button>
+    </div>
+  );
+}
+
 function Settings() {
   const [s, setS] = useState<{ holidayState: string; ownTeamLevel: string; defaultLevel: string } | null>(null);
   useEffect(() => void get<typeof s>('/api/admin/settings').then(setS, reportError), []);
@@ -339,6 +655,7 @@ function Settings() {
         <select value={s.holidayState} onChange={(e) => setS({ ...s, holidayState: e.target.value })}>
           {Object.entries(STATES).map(([k, n]) => <option key={k} value={k}>{n}</option>)}
         </select>
+        <span className="muted small">Quelle für die gesetzlichen Feiertage. Beim Wechsel werden sie in allen Jahren ausgetauscht; eigene und geänderte Einträge unter <em>Feiertage</em> bleiben erhalten.</span>
       </label>
       <label>Recht aller Benutzer auf alle Teams
         <select value={s.defaultLevel} onChange={(e) => setS({ ...s, defaultLevel: e.target.value })}>
@@ -350,31 +667,68 @@ function Settings() {
           <option value="none">keins</option><option value="view">ansehen</option><option value="edit">bearbeiten</option><option value="manage">verwalten</option>
         </select>
       </label>
-      <button className="primary" onClick={() => void run(async () => { await put('/api/admin/settings', s); store.holidays.clear(); })}>Speichern</button>
+      <button className="primary" onClick={() => void run(async () => { await put('/api/admin/settings', s); })}>Speichern</button>
     </div>
   );
 }
 
-// ---------------- Protokoll ----------------
-function Audit() {
-  const [rows, setRows] = useState<{ id: number; ts: string; user_name: string | null; action: string; entity: string; entity_id: number; date: string | null }[]>([]);
-  useEffect(() => void get<typeof rows>('/api/audit?limit=300').then(setRows, reportError), []);
-  const { boot } = useStore();
+// ---------------- Beispieldaten ----------------
+interface DemoSummary {
+  present: boolean;
+  createdAt?: string;
+  departments: number;
+  teams: number;
+  employees: number;
+  entries: number;
+  users: { username: string; displayName: string; role: string }[];
+}
+function DemoData() {
+  const [s, setS] = useState<DemoSummary | null>(null);
+  const [busy, setBusy] = useState(false);
+  const load = () => get<DemoSummary>('/api/admin/demo').then(setS, reportError);
+  useEffect(() => void load(), []);
+  async function act(method: 'POST' | 'DELETE') {
+    const q =
+      method === 'POST'
+        ? 'Beispieldaten einfügen? Es werden 3 Abteilungen, 6 Teams, 20 Mitarbeiter, Planeinträge für drei Monate und 3 Beispielkonten angelegt. Vorhandene Daten bleiben unverändert.'
+        : 'Beispieldaten entfernen? Alle Beispiel-Abteilungen, -Teams, -Mitarbeiter, ihre Planeinträge und die Beispielkonten werden gelöscht. Deine eigenen Daten bleiben erhalten.';
+    if (!confirm(q)) return;
+    setBusy(true);
+    const ok = await run(() => api(method, '/api/admin/demo'), method === 'POST' ? 'Beispieldaten eingefügt' : 'Beispieldaten entfernt');
+    setBusy(false);
+    if (ok) void load();
+  }
+  if (!s) return null;
   return (
-    <table className="simple">
-      <thead><tr><th>Zeitpunkt</th><th>Benutzer</th><th>Aktion</th><th>Objekt</th><th>Tag</th></tr></thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r.id}>
-            <td>{new Date(r.ts).toLocaleString('de-DE')}</td>
-            <td>{r.user_name ?? '–'}</td>
-            <td>{r.action}</td>
-            <td>{r.entity} #{r.entity_id}</td>
-            <td>{r.date ?? ''}</td>
-          </tr>
-        ))}
-        {rows.length === 0 && boot && <tr><td colSpan={5} className="muted">Keine Einträge</td></tr>}
-      </tbody>
-    </table>
+    <div className="card narrow demo">
+      <h3>Beispieldaten</h3>
+      {s.present ? (
+        <>
+          <p>
+            Vorhanden seit {s.createdAt ? new Date(s.createdAt).toLocaleString('de-DE') : '–'}: {s.departments} Abteilungen, {s.teams} Teams,{' '}
+            {s.employees} Mitarbeiter, {s.entries} Planeinträge.
+          </p>
+          <p className="small">Beispielkonten (Passwort jeweils <code>demo1234</code>):</p>
+          <ul className="small">
+            {s.users.map((u) => (
+              <li key={u.username}>
+                <code>{u.username}</code> – {u.role}
+              </li>
+            ))}
+          </ul>
+          <button className="danger" disabled={busy} onClick={() => void act('DELETE')}>Beispieldaten entfernen</button>
+        </>
+      ) : (
+        <>
+          <p className="small">
+            Zum Ausprobieren: legt Abteilungen, Teams (auch gleichnamige wie „Meisterei 1“ in zwei Abteilungen), 20 Mitarbeiter mit
+            Diensten, Urlaub, Krankheit und Notizen für den vorigen bis nächsten Monat sowie drei Beispielkonten mit unterschiedlichen
+            Rechten an. Alles ist mit „Beispiel“ gekennzeichnet und lässt sich hier mit einem Klick wieder vollständig entfernen.
+          </p>
+          <button className="primary" disabled={busy} onClick={() => void act('POST')}>Beispieldaten einfügen</button>
+        </>
+      )}
+    </div>
   );
 }
+

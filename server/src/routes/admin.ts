@@ -3,6 +3,9 @@ import { z } from 'zod';
 import { HttpError, requireAdmin, requireUser, type AppContext } from '../app.js';
 import { audit, getSetting, setSetting } from '../db.js';
 import { hashPassword } from '../auth.js';
+import { DemoError, demoSummary, insertDemoData, removeDemoData } from '../demo.js';
+import { resyncOfficial } from '../holiday-store.js';
+import { createPasswordLink, openLinks, unusablePasswordHash } from '../password-links.js';
 
 const idParam = z.object({ id: z.coerce.number().int() });
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/);
@@ -102,20 +105,53 @@ export async function adminRoutes(app: FastifyInstance, { db, hub }: AppContext)
   const empValues = (b: z.infer<typeof empBody>) =>
     [b.teamId, b.firstName, b.lastName, b.shortName || null, b.personnelNo || null, b.sortOrder, b.active ? 1 : 0, b.vacationDaysPerYear] as const;
 
+  function insertEmployee(b: z.infer<typeof empBody>): number {
+    return Number(
+      db
+        .prepare(
+          `INSERT INTO employees(team_id, first_name, last_name, short_name, personnel_no, sort_order, active, vacation_days_per_year)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(...empValues(b)).lastInsertRowid,
+    );
+  }
+
+  /**
+   * Benutzer anlegen. Ohne Passwort: unbenutzbares Passwort + Einrichtungslink, über den der Benutzer
+   * sein Passwort selbst festlegt. Mit Passwort: muss bei der ersten Anmeldung geändert werden.
+   */
+  function insertUser(adminId: number, u: { username: string; displayName: string; employeeId: number | null; isAdmin?: boolean; active?: boolean; password?: string }) {
+    if (db.prepare('SELECT 1 FROM users WHERE username = ?').get(u.username)) throw new HttpError(409, `Benutzername „${u.username}“ ist schon vergeben`);
+    const id = Number(
+      db
+        .prepare(
+          `INSERT INTO users(username, display_name, password_hash, employee_id, is_admin, active, must_change_password)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(u.username, u.displayName, u.password ? hashPassword(u.password) : unusablePasswordHash(), u.employeeId, u.isAdmin ? 1 : 0, u.active === false ? 0 : 1, u.password ? 1 : 0)
+        .lastInsertRowid,
+    );
+    const link = u.password ? null : createPasswordLink(db, id, 'setup', adminId);
+    return { id, link };
+  }
+
+  const accountBody = z.object({ username: z.string().trim().min(2).max(50), displayName: z.string().trim().min(1).optional() });
+
   app.post('/api/admin/employees', async (req) => {
     const { user, perms } = requireUser(req);
-    const b = empBody.parse(req.body);
+    const b = empBody.extend({ account: accountBody.optional() }).parse(req.body);
     if (!perms.can(b.teamId, 'manage')) throw new HttpError(403, 'Keine Berechtigung für dieses Team');
+    if (b.account && !perms.isAdmin) throw new HttpError(403, 'Benutzerkonten können nur Administratoren anlegen');
     return change(user.id, 'employee', 'create', () => {
-      const id = Number(
-        db
-          .prepare(
-            `INSERT INTO employees(team_id, first_name, last_name, short_name, personnel_no, sort_order, active, vacation_days_per_year)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          )
-          .run(...empValues(b)).lastInsertRowid,
-      );
-      return { id, after: b };
+      const id = insertEmployee(b);
+      let account: { userId: number; username: string; link: ReturnType<typeof createPasswordLink> | null } | undefined;
+      if (b.account) {
+        const displayName = b.account.displayName || `${b.firstName} ${b.lastName}`;
+        const u = insertUser(user.id, { username: b.account.username, displayName, employeeId: id });
+        audit(db, { userId: user.id, action: 'create', entity: 'user', entityId: u.id, after: { username: b.account.username, displayName, employeeId: id } });
+        account = { userId: u.id, username: b.account.username, link: u.link };
+      }
+      return { id, after: { ...b, account: undefined }, ret: { id, account } };
     });
   });
   app.put('/api/admin/employees/:id', async (req) => {
@@ -203,8 +239,10 @@ export async function adminRoutes(app: FastifyInstance, { db, hub }: AppContext)
       )
       .all() as Record<string, unknown>[];
     const grants = db.prepare('SELECT id, user_id AS userId, scope, scope_id AS scopeId, level FROM grants').all() as { userId: number }[];
+    const links = openLinks(db);
     return users.map((u) => ({
       ...u,
+      pendingLink: links.get(u.id as number) ?? null,
       isAdmin: !!u.isAdmin,
       active: !!u.active,
       mustChangePassword: !!u.mustChangePassword,
@@ -235,20 +273,31 @@ export async function adminRoutes(app: FastifyInstance, { db, hub }: AppContext)
 
   app.post('/api/admin/users', async (req) => {
     const { user } = requireAdmin(req);
-    const b = userBody.parse(req.body);
-    if (!b.password) throw new HttpError(400, 'Startpasswort erforderlich (mind. 8 Zeichen)');
+    // ohne Passwort -> Einrichtungslink; mit newEmployee wird der Mitarbeiter gleich mit angelegt
+    const b = userBody.extend({ newEmployee: empBody.optional() }).parse(req.body);
+    if (b.newEmployee && b.employeeId) throw new HttpError(400, 'Entweder vorhandenen Mitarbeiter verknüpfen oder neuen anlegen');
     return change(user.id, 'user', 'create', () => {
-      const id = Number(
-        db
-          .prepare(
-            `INSERT INTO users(username, display_name, password_hash, employee_id, is_admin, active, must_change_password)
-             VALUES (?, ?, ?, ?, ?, ?, 1)`,
-          )
-          .run(b.username, b.displayName, hashPassword(b.password!), b.employeeId ?? null, b.isAdmin ? 1 : 0, b.active ? 1 : 0).lastInsertRowid,
-      );
-      writeGrants(id, b.grants);
-      return { id, after: { ...b, password: undefined } };
+      let employeeId = b.employeeId ?? null;
+      if (b.newEmployee) {
+        employeeId = insertEmployee(b.newEmployee);
+        audit(db, { userId: user.id, action: 'create', entity: 'employee', entityId: employeeId, after: b.newEmployee });
+      }
+      const u = insertUser(user.id, { username: b.username, displayName: b.displayName, employeeId, isAdmin: b.isAdmin, active: b.active, password: b.password });
+      writeGrants(u.id, b.grants);
+      return { id: u.id, after: { ...b, password: b.password ? '***' : undefined }, ret: { id: u.id, employeeId, link: u.link } };
     });
+  });
+
+  /** Neuen Einrichtungs- bzw. Zurücksetz-Link erzeugen (alte Links werden ungültig). */
+  app.post('/api/admin/users/:id/password-link', async (req) => {
+    const { user } = requireAdmin(req);
+    const { id } = idParam.parse(req.params);
+    const b = z.object({ purpose: z.enum(['setup', 'reset']).default('reset') }).parse(req.body ?? {});
+    const u = db.prepare('SELECT username, display_name FROM users WHERE id = ?').get(id) as { username: string; display_name: string } | undefined;
+    if (!u) throw new HttpError(404, 'Nicht gefunden');
+    const link = createPasswordLink(db, id, b.purpose, user.id);
+    audit(db, { userId: user.id, action: 'update', entity: 'user', entityId: id, after: { username: u.username, passwordLink: b.purpose } });
+    return { userId: id, username: u.username, displayName: u.display_name, link };
   });
 
   app.put('/api/admin/users/:id', async (req) => {
@@ -277,6 +326,54 @@ export async function adminRoutes(app: FastifyInstance, { db, hub }: AppContext)
     });
   });
 
+  // ---------- Beispieldaten ----------
+  app.get('/api/admin/demo', async (req) => {
+    requireAdmin(req);
+    return demoSummary(db);
+  });
+  const demoAction = (userId: number, action: 'create' | 'delete', fn: () => unknown) => {
+    let result: unknown;
+    try {
+      result = fn();
+    } catch (e) {
+      if (e instanceof DemoError) throw new HttpError(409, e.message);
+      throw e;
+    }
+    audit(db, { userId, action, entity: 'demo_data', entityId: null, after: action === 'create' ? result : undefined, before: action === 'delete' ? result : undefined });
+    hub.invalidate();
+    // offene Pläne laden Stammdaten und Einträge neu
+    hub.broadcast('masterdata', () => ({ entity: 'demo_data', reloadEntries: true }));
+    return result;
+  };
+  app.post('/api/admin/demo', async (req) => {
+    const { user } = requireAdmin(req);
+    return demoAction(user.id, 'create', () => insertDemoData(db));
+  });
+  app.delete('/api/admin/demo', async (req) => {
+    const { user } = requireAdmin(req);
+    return demoAction(user.id, 'delete', () => removeDemoData(db));
+  });
+
+  // ---------- Ansprechpartner bei Anmeldeproblemen ----------
+  const contactBody = z.object({
+    name: z.string().trim().max(100).default(''),
+    phone: z.string().trim().max(50).default(''),
+    email: z.string().trim().max(100).default(''),
+    note: z.string().trim().max(300).default(''),
+  });
+  app.get('/api/admin/support-contact', async (req) => {
+    requireAdmin(req);
+    return contactBody.parse(JSON.parse(getSetting(db, 'support_contact', '{}')));
+  });
+  app.put('/api/admin/support-contact', async (req) => {
+    const { user } = requireAdmin(req);
+    const b = contactBody.parse(req.body);
+    return change(user.id, 'settings', 'update', () => {
+      setSetting(db, 'support_contact', JSON.stringify(b));
+      return { id: 0, after: { supportContact: b }, ret: b };
+    });
+  });
+
   // ---------- Einstellungen ----------
   app.get('/api/admin/settings', async (req) => {
     requireAdmin(req);
@@ -295,11 +392,16 @@ export async function adminRoutes(app: FastifyInstance, { db, hub }: AppContext)
         defaultLevel: z.enum(['none', 'view', 'edit']),
       })
       .parse(req.body);
-    return change(user.id, 'settings', 'update', () => {
+    const stateChanged = b.holidayState !== getSetting(db, 'holiday_state', 'NW');
+    const result = change(user.id, 'settings', 'update', () => {
       setSetting(db, 'holiday_state', b.holidayState);
+      // neues Bundesland: unveränderte gesetzliche Feiertage in allen eingerichteten Jahren austauschen
+      if (stateChanged) resyncOfficial(db);
       setSetting(db, 'own_team_level', b.ownTeamLevel);
       setSetting(db, 'default_level', b.defaultLevel);
       return { id: 0, after: b, ret: b };
     });
+    if (stateChanged) hub.broadcast('holidays', () => ({}));
+    return result;
   });
 }

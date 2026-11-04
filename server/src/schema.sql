@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS users (
   is_admin       INTEGER NOT NULL DEFAULT 0,
   active         INTEGER NOT NULL DEFAULT 1,
   must_change_password INTEGER NOT NULL DEFAULT 0,
+  font_scale     REAL NOT NULL DEFAULT 1,      -- persönliche Schriftgröße (1 = 100 %)
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -126,3 +127,32 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 INSERT OR IGNORE INTO settings(key, value) VALUES ('own_team_level', 'edit');
 INSERT OR IGNORE INTO settings(key, value) VALUES ('holiday_state', 'NW');
+
+-- Feiertage und betrieblich arbeitsfreie Tage (bearbeitbar).
+-- from_source = 1: aus der eingebauten Quelle übernommen und seitdem nicht geändert.
+CREATE TABLE IF NOT EXISTS holidays (
+  id          INTEGER PRIMARY KEY,
+  date        TEXT NOT NULL UNIQUE,
+  name        TEXT NOT NULL,
+  kind        TEXT NOT NULL DEFAULT 'public' CHECK (kind IN ('public','company')),
+  from_source INTEGER NOT NULL DEFAULT 0
+);
+-- Jahre, die bereits eingerichtet sind (werden nicht erneut automatisch befüllt).
+CREATE TABLE IF NOT EXISTS holiday_years (
+  year INTEGER PRIMARY KEY
+);
+
+-- Einrichtungs- und Zurücksetz-Links für Passwörter (Token nur als Hash gespeichert).
+-- secret_kind: welches bekannte Merkmal beim Öffnen abgefragt wird (Personalnummer oder Kürzel des verknüpften Mitarbeiters).
+CREATE TABLE IF NOT EXISTS password_tokens (
+  id          INTEGER PRIMARY KEY,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash  TEXT NOT NULL UNIQUE,
+  purpose     TEXT NOT NULL CHECK (purpose IN ('setup','reset')),
+  secret_kind TEXT CHECK (secret_kind IN ('personnel_no','short_name')),
+  created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  expires_at  TEXT NOT NULL,
+  used_at     TEXT,
+  attempts    INTEGER NOT NULL DEFAULT 0
+);
