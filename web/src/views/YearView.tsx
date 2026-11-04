@@ -40,6 +40,7 @@ export function YearView({ nav, setNav }: { nav: NavState; setNav: (n: NavState)
   }
 
   const teams = sortedTeams(boot, (tm) => boot.employees.some((e) => e.teamId === tm.id && e.active));
+  const teamSize = boot.employees.filter((e) => e.teamId === emp.teamId && e.active).length;
   return (
     <div className="year">
       <div className="toolbar">
@@ -58,6 +59,22 @@ export function YearView({ nav, setNav }: { nav: NavState; setNav: (n: NavState)
             </optgroup>
           ))}
         </select>
+        <div className="spacer" />
+        <button onClick={() => window.print()} title="Jahresübersicht drucken (A4 quer). Im Druckdialog kann auch „Als PDF speichern“ gewählt werden.">🖨 Drucken</button>
+        <a className="button" href={`/api/pdf/year?year=${year}&employeeId=${emp.id}`} download title="Jahresübersicht als PDF-Datei herunterladen">
+          ⬇ PDF
+        </a>
+        {teamSize > 1 && (
+          <a className="button" href={`/api/pdf/year?year=${year}&teamId=${emp.teamId}`} download title={`PDF mit einer Seite je Mitarbeiter (${teamSize}) aus ${teamLabel(boot, emp.teamId)}`}>
+            ⬇ PDF ganzes Team
+          </a>
+        )}
+      </div>
+      <div className="print-only print-head">
+        <h1>Jahresübersicht {year}</h1>
+        <div>
+          <strong>{fullName(emp)}</strong> · {teamLabel(boot, emp.teamId)}
+        </div>
       </div>
 
       <div className="grid-wrap">

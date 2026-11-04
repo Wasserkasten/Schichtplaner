@@ -5,13 +5,16 @@ import { departmentName, fullName, reportError, sortedTeams, teamLabel, teamsByD
 import type { Employee, EntryType, Level } from '../types';
 import { Modal } from '../components/Modal';
 import { HolidayAdmin } from './HolidayAdmin';
+import { AuditLog } from './AuditLog';
+import { InfoView } from './InfoView';
 
-type Tab = 'employees' | 'structure' | 'users' | 'types' | 'holidays' | 'settings' | 'audit';
+export type AdminTab = 'employees' | 'structure' | 'users' | 'types' | 'holidays' | 'settings' | 'audit' | 'info';
+type Tab = AdminTab;
 
-export function AdminView() {
+export function AdminView({ initialTab = 'employees' }: { initialTab?: AdminTab }) {
   const { boot } = useStore();
   const isAdmin = boot!.me.isAdmin;
-  const [tab, setTab] = useState<Tab>('employees');
+  const [tab, setTab] = useState<Tab>(initialTab);
   const tabs: [Tab, string, boolean][] = [
     ['employees', 'Mitarbeiter', true],
     ['structure', 'Abteilungen & Teams', isAdmin],
@@ -20,6 +23,7 @@ export function AdminView() {
     ['holidays', 'Feiertage', isAdmin],
     ['settings', 'Einstellungen', isAdmin],
     ['audit', 'Protokoll', isAdmin],
+    ['info', 'Info', isAdmin],
   ];
   return (
     <div className="admin">
@@ -41,7 +45,8 @@ export function AdminView() {
           <DemoData />
         </>
       )}
-      {tab === 'audit' && <Audit />}
+      {tab === 'audit' && <AuditLog />}
+      {tab === 'info' && <InfoView />}
     </div>
   );
 }
@@ -437,26 +442,3 @@ function DemoData() {
   );
 }
 
-// ---------------- Protokoll ----------------
-function Audit() {
-  const [rows, setRows] = useState<{ id: number; ts: string; user_name: string | null; action: string; entity: string; entity_id: number; date: string | null }[]>([]);
-  useEffect(() => void get<typeof rows>('/api/audit?limit=300').then(setRows, reportError), []);
-  const { boot } = useStore();
-  return (
-    <table className="simple">
-      <thead><tr><th>Zeitpunkt</th><th>Benutzer</th><th>Aktion</th><th>Objekt</th><th>Tag</th></tr></thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r.id}>
-            <td>{new Date(r.ts).toLocaleString('de-DE')}</td>
-            <td>{r.user_name ?? '–'}</td>
-            <td>{r.action}</td>
-            <td>{r.entity} #{r.entity_id}</td>
-            <td>{r.date ?? ''}</td>
-          </tr>
-        ))}
-        {rows.length === 0 && boot && <tr><td colSpan={5} className="muted">Keine Einträge</td></tr>}
-      </tbody>
-    </table>
-  );
-}

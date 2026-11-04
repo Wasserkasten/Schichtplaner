@@ -229,3 +229,60 @@ table.simple tr.inactive-soft td { color: var(--muted); }
 .fontsize { display: flex; align-items: center; gap: 6px; padding-top: 4px; border-top: 1px solid var(--line); }
 .fontsize button { min-width: 2.2rem; padding: 3px 6px; }
 .fontsize .val { white-space: nowrap; min-width: 3.6rem; text-align: center; font-variant-numeric: tabular-nums; }
+
+/* Rückgängig-Meldungen (unten links) und Verlauf in der Kopfzeile */
+.notices { position: fixed; left: 16px; bottom: 16px; display: flex; flex-direction: column-reverse; gap: 6px; z-index: 190; max-width: min(560px, calc(100vw - 32px)); padding-bottom: env(safe-area-inset-bottom); }
+.notice { display: flex; align-items: center; gap: 8px; background: #26323f; color: #fff; padding: 6px 6px 6px 12px; border-radius: 8px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25); }
+.notice .text { flex: 1; font-size: 0.93rem; }
+.notice.undone { background: #4a5461; }
+.notice .undo { background: transparent; color: #ffd166; border-color: #ffd166; white-space: nowrap; }
+.notice .icon { color: #fff; }
+details.history > summary::after { content: ''; }
+details.history > summary { font-size: 1.1rem; padding: 2px 10px; }
+.count-badge { background: #ffd166; color: #26323f; border-radius: 9px; font-size: 0.7rem; padding: 0 6px; margin-left: 4px; vertical-align: top; }
+details.history .menu { left: auto; right: 0; min-width: min(460px, 92vw); }
+.history-row { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; border-top: 1px solid var(--line); padding: 4px 0; }
+.history-row.undone .text { color: var(--muted); }
+.history-row .undo { white-space: nowrap; }
+@media (max-width: 700px) { .notices { left: 8px; right: 8px; bottom: 8px; } }
+
+/* Links, die wie Knöpfe aussehen (z. B. PDF herunterladen) */
+a.button { display: inline-block; background: var(--panel); border: 1px solid var(--line-strong); border-radius: 6px; padding: 5px 10px; color: inherit; text-decoration: none; }
+a.button:hover { border-color: var(--accent); }
+
+/* Drucken: nur der Inhalt, A4 quer, Farben erhalten */
+.print-only { display: none; }
+@media print {
+  @page { size: A4 landscape; margin: 10mm; }
+  :root { --fs: 0.8 !important; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body, .app, main { background: #fff !important; color: #000; }
+  .topbar, .toolbar, .palette, .toasts, .notices, .no-print, .modal, .overlay { display: none !important; }
+  .print-only { display: block !important; }
+  .print-head { margin-bottom: 8px; }
+  .print-head h1 { margin: 0 0 2px; font-size: 1.4rem; }
+  main { padding: 0; }
+  .grid-wrap { overflow: visible !important; max-height: none !important; border: 0; }
+  table.plan { min-width: 0 !important; }
+  .plan .sticky-col, .plan thead th { position: static !important; }
+  .plan td.editable:hover { box-shadow: none; }
+  .summary { break-inside: avoid; margin-top: 8px; }
+  .card { border-color: #ccc; }
+}
+
+/* Hinweis nach einem Update (nur Administratoren) */
+.update-banner { display: flex; align-items: center; gap: 10px; background: #fff4cc; color: #3d3200; padding: 6px 12px; border-bottom: 1px solid #e8d27a; }
+.update-banner .link { color: #1f4e79; text-decoration: underline; }
+.update-banner .icon { margin-left: auto; }
+/* Info / Changelog */
+.info .version { font-size: 1.3rem; font-weight: 700; }
+.changelog { max-width: 900px; }
+.markdown h2 { margin-top: 18px; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+.markdown h3 { margin-top: 10px; color: var(--accent); }
+.markdown ul { padding-left: 20px; }
+.markdown li { margin: 3px 0; }
+.markdown code { background: var(--accent-soft); padding: 0 4px; border-radius: 3px; }
+/* Protokoll */
+.audit .details-toggle { margin-left: 8px; color: var(--accent); }
+.audit-details { margin: 4px 0 0; padding-left: 18px; color: var(--muted); }
+.audit td.row { margin: 0; }

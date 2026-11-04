@@ -313,3 +313,111 @@ describe('Persönliche Einstellungen', () => {
     expect(cols).toContain('font_scale');
   });
 });
+
+describe('Rückgängig', () => {
+  const typeId = (code: string) => (db.prepare('SELECT id FROM entry_types WHERE code = ?').get(code) as { id: number }).id;
+  const cellCodes = (date: string) =>
+    (db.prepare('SELECT t.code FROM entries e JOIN entry_types t ON t.id = e.type_id WHERE e.employee_id = ? AND e.date = ? ORDER BY t.code').all(ids.eA, date) as { code: string }[]).map((r) => r.code).join(',');
+  const undo = (cookie: string, changeId: string) => app.inject({ method: 'POST', url: `/api/changes/${changeId}/undo`, headers: { cookie } });
+
+  it('nimmt einen Pinselstrich über mehrere Tage komplett zurück – und wieder her', async () => {
+    const cookie = await login('anna');
+    for (const date of ['2026-12-01', '2026-12-02']) await app.inject({ method: 'POST', url: '/api/entries', headers: { cookie }, payload: { employeeId: ids.eA, date, typeId: typeId('F') } });
+    const bulk = (await app.inject({
+      method: 'POST', url: '/api/entries/bulk', headers: { cookie },
+      payload: { action: 'set', typeId: typeId('U'), cells: ['2026-12-01', '2026-12-02', '2026-12-03'].map((date) => ({ employeeId: ids.eA, date })) },
+    })).json();
+    expect([cellCodes('2026-12-01'), cellCodes('2026-12-03')]).toEqual(['U', 'U']);
+
+    const u = await undo(cookie, bulk.changeId);
+    expect(u.statusCode).toBe(200);
+    expect([cellCodes('2026-12-01'), cellCodes('2026-12-02'), cellCodes('2026-12-03')]).toEqual(['F', 'F', '']);
+    expect((await undo(cookie, bulk.changeId)).statusCode).toBe(409); // schon zurückgenommen
+
+    const redo = await undo(cookie, u.json().changeId); // Rücknahme zurücknehmen = wiederholen
+    expect(redo.statusCode).toBe(200);
+    expect([cellCodes('2026-12-01'), cellCodes('2026-12-03')]).toEqual(['U', 'U']);
+  });
+
+  it('Änderung eines Eintrags zurücknehmen', async () => {
+    const cookie = await login('anna');
+    const e = (await app.inject({ method: 'POST', url: '/api/entries', headers: { cookie }, payload: { employeeId: ids.eA, date: '2026-12-05', typeId: typeId('F') } })).json();
+    const p = (await app.inject({ method: 'PATCH', url: `/api/entries/${e.id}`, headers: { cookie }, payload: { version: e.version, typeId: typeId('S') } })).json();
+    expect((await undo(cookie, p.changeId)).statusCode).toBe(200);
+    expect(cellCodes('2026-12-05')).toBe('F');
+    const d = (await app.inject({ method: 'DELETE', url: `/api/entries/${e.id}`, headers: { cookie } })).json();
+    expect((await undo(cookie, d.changeId)).statusCode).toBe(200);
+    expect(cellCodes('2026-12-05')).toBe('F');
+  });
+
+  it('verweigert, wenn jemand anderes den Eintrag inzwischen geändert hat', async () => {
+    const anna = await login('anna');
+    const lead = await login('lead');
+    const e = (await app.inject({ method: 'POST', url: '/api/entries', headers: { cookie: anna }, payload: { employeeId: ids.eA, date: '2026-12-06', typeId: typeId('F') } })).json();
+    await app.inject({ method: 'PATCH', url: `/api/entries/${e.id}`, headers: { cookie: lead }, payload: { version: e.version, typeId: typeId('N') } });
+    const res = await undo(anna, e.changeId);
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toContain('Lead');
+    expect(cellCodes('2026-12-06')).toBe('N'); // nichts verändert
+  });
+
+  it('fremde Änderungen nur als Administrator', async () => {
+    const anna = await login('anna');
+    const e = (await app.inject({ method: 'POST', url: '/api/entries', headers: { cookie: anna }, payload: { employeeId: ids.eA, date: '2026-12-07', typeId: typeId('F') } })).json();
+    expect((await undo(await login('lead'), e.changeId)).statusCode).toBe(403);
+    expect((await undo(await login('admin'), e.changeId)).statusCode).toBe(200);
+  });
+});
+
+describe('PDF, Version, Protokoll', () => {
+  it('Jahresübersicht als PDF für Mitarbeiter und Team, mit Rechteprüfung', async () => {
+    const anna = await login('anna');
+    const res = await app.inject({ method: 'GET', url: `/api/pdf/year?year=2026&employeeId=${ids.eA}`, headers: { cookie: anna } });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toBe('application/pdf');
+    expect(res.headers['content-disposition']).toContain('Jahresuebersicht_2026');
+    expect(res.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
+    const team = await app.inject({ method: 'GET', url: `/api/pdf/year?year=2026&teamId=${ids.tB}`, headers: { cookie: anna } });
+    expect(team.statusCode).toBe(200);
+    db.prepare("INSERT OR REPLACE INTO settings(key, value) VALUES ('default_level', 'none')").run();
+    expect((await app.inject({ method: 'GET', url: `/api/pdf/year?year=2026&teamId=${ids.tB}`, headers: { cookie: anna } })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'GET', url: '/api/pdf/year?year=2026', headers: { cookie: anna } })).statusCode).toBe(400);
+  });
+
+  it('Version und Changelog', async () => {
+    const pkg = JSON.parse((await import('node:fs')).readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
+    expect((await app.inject({ method: 'GET', url: '/api/health' })).json().version).toBe(pkg.version);
+    expect((await app.inject({ method: 'GET', url: '/api/admin/changelog', headers: { cookie: await login('anna') } })).statusCode).toBe(403);
+    const cl = (await app.inject({ method: 'GET', url: '/api/admin/changelog', headers: { cookie: await login('admin') } })).json();
+    expect(cl.markdown).toContain(`## [${pkg.version}]`);
+  });
+
+  it('Gesamtprotokoll mit Namen, Änderungs-ID und Rücknahme-Status', async () => {
+    const anna = await login('anna');
+    const typeF = ids.typeF;
+    const bulk = (await app.inject({ method: 'POST', url: '/api/entries/bulk', headers: { cookie: anna }, payload: { action: 'set', typeId: typeF, cells: ['2026-12-10', '2026-12-11'].map((date) => ({ employeeId: ids.eA, date })) } })).json();
+    await app.inject({ method: 'POST', url: `/api/changes/${bulk.changeId}/undo`, headers: { cookie: anna } });
+    const log = (await app.inject({ method: 'GET', url: '/api/audit?limit=3', headers: { cookie: await login('admin') } })).json();
+    const ofBulk = log.rows.filter((r: { change_id: string }) => r.change_id === bulk.changeId);
+    expect(ofBulk).toHaveLength(2); // Änderung nicht über die Seitengrenze zerteilt
+    expect(ofBulk[0]).toMatchObject({ employee_name: 'Anna A', user_name: 'Anna' });
+    expect(log.undone).toContain(bulk.changeId);
+  });
+});
+
+describe('Rückgängig – Mischstände vermeiden', () => {
+  it('lehnt ab, wenn ein angelegter Eintrag inzwischen von jemand anderem ersetzt wurde', async () => {
+    const typeId = (code: string) => (db.prepare('SELECT id FROM entry_types WHERE code = ?').get(code) as { id: number }).id;
+    const anna = await login('anna');
+    const lead = await login('lead');
+    const cell = [{ employeeId: ids.eA, date: '2026-12-20' }];
+    await app.inject({ method: 'POST', url: '/api/entries', headers: { cookie: anna }, payload: { ...cell[0], typeId: typeId('F') } });
+    const k = (await app.inject({ method: 'POST', url: '/api/entries/bulk', headers: { cookie: anna }, payload: { action: 'set', typeId: typeId('K'), cells: cell } })).json();
+    await app.inject({ method: 'POST', url: '/api/entries/bulk', headers: { cookie: lead }, payload: { action: 'set', typeId: typeId('S'), cells: cell } });
+    const res = await app.inject({ method: 'POST', url: `/api/changes/${k.changeId}/undo`, headers: { cookie: anna } });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toContain('Lead');
+    const codes = (db.prepare("SELECT t.code FROM entries e JOIN entry_types t ON t.id = e.type_id WHERE e.employee_id = ? AND e.date = '2026-12-20'").all(ids.eA) as { code: string }[]).map((r) => r.code);
+    expect(codes).toEqual(['S']); // kein „F S“
+  });
+});

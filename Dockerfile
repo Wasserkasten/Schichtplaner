@@ -24,6 +24,8 @@ FROM node:22-bookworm-slim
 ENV NODE_ENV=production PORT=3000 DB_FILE=/data/schichtplaner.db STATIC_DIR=/app/web/dist
 WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
+# Versionsnummer und Changelog (Anzeige unter Verwaltung → Info)
+COPY package.json CHANGELOG.md ./
 COPY --from=build /app/server/package.json ./server/
 COPY --from=build /app/server/dist ./server/dist
 COPY --from=build /app/server/src/schema.sql ./server/src/schema.sql

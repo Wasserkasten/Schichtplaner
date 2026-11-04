@@ -17,14 +17,18 @@ interface AuditRow {
 }
 
 /** Bearbeitungsdialog für eine Zelle (Mitarbeiter + Tag). */
-export function CellEditor({ employeeId, date, onClose }: { employeeId: number; date: string; onClose: () => void }) {
+export function CellEditor({ employeeId, date, onClose, initialTab = 'edit' }: { employeeId: number; date: string; onClose: () => void; initialTab?: 'edit' | 'history' }) {
   const st = useStore();
   const boot = st.boot!;
   const types = typeMap(boot);
   const emp = boot.employees.find((e) => e.id === employeeId)!;
   const entries = st.cell(employeeId, date);
   const editable = canEditEmployee(boot, employeeId);
-  const [tab, setTab] = useState<'edit' | 'history'>('edit');
+  const [tab, setTab] = useState<'edit' | 'history'>(initialTab);
+  // aus dem Protokoll geöffnet: der Tag ist evtl. noch nicht geladen
+  useEffect(() => {
+    if (initialTab === 'history') store.loadRange(date, date, employeeId).catch(reportError);
+  }, [initialTab, date, employeeId]);
 
   return (
     <Modal title={`${fullName(emp)} – ${fmtLong(date)}`} onClose={onClose}>
@@ -85,22 +89,22 @@ function EntryEditRow({ e }: { e: Entry }) {
 
   async function save() {
     try {
-      const updated = await patch<Entry>(`/api/entries/${e.id}`, {
+      const { changeId, ...updated } = await patch<Entry & { changeId: string }>(`/api/entries/${e.id}`, {
         version: e.version,
         typeId,
         text: text || null,
         startTime: startTime || null,
         endTime: endTime || null,
       });
-      store.upsert([updated]);
+      store.applyChange(changeId, { updated: { before: e, after: updated } });
     } catch (err) {
       reportError(err);
     }
   }
   async function remove() {
     try {
-      await del(`/api/entries/${e.id}?version=${e.version}`);
-      store.remove([e.id]);
+      const res = await del<{ changeId: string }>(`/api/entries/${e.id}?version=${e.version}`);
+      store.applyChange(res.changeId, { deletedIds: [e.id] });
     } catch (err) {
       reportError(err);
     }
@@ -149,14 +153,13 @@ function NewEntry({ employeeId, date }: { employeeId: number; date: string }) {
       dates.push(d);
     }
     try {
-      const res = await post<{ created: Entry[]; deleted: number[]; skipped: number }>('/api/entries/bulk', {
+      const res = await post<{ created: Entry[]; deleted: number[]; skipped: number; changeId: string }>('/api/entries/bulk', {
         action: typeId && replace ? 'set' : 'add',
         cells: dates.map((d) => ({ employeeId, date: d })),
         typeId,
         text: text.trim() || null,
       });
-      store.remove(res.deleted);
-      store.upsert(res.created);
+      store.applyChange(res.changeId, { created: res.created, deletedIds: res.deleted });
       if (res.skipped) store.toast(`${res.skipped} ${res.skipped === 1 ? 'Tag' : 'Tage'} übersprungen: dort schon eingetragen oder bereits ${MAX_TYPED} Dienste.`);
       setText('');
       setTypeId(null);

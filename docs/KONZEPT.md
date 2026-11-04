@@ -70,6 +70,10 @@ Die effektive Stufe je Team ist das **Maximum** aus:
 
 ## 5. Gleichzeitiges Arbeiten
 
+* **Rückgängig:** Jede Aktion (auch ein Pinselstrich über viele Zellen) hat eine Änderungs-ID; alle Protokollzeilen
+  dazu lassen sich gemeinsam zurücknehmen. Die Rücknahme prüft, dass keiner der Einträge inzwischen von jemand anderem
+  geändert wurde, und ist selbst wieder eine (zurücknehmbare) Änderung.
+
 * **Live-Aktualisierung** per Server-Sent Events: Änderungen erscheinen sofort bei allen, die den
   betroffenen Zeitraum offen haben – gefiltert/maskiert nach den Rechten des jeweiligen Empfängers.
 * **Optimistische Sperre**: jeder Eintrag hat eine Versionsnummer. Wer einen veralteten Stand speichert,
@@ -105,14 +109,15 @@ Das ist ein privates Projekt mit Daten des Arbeitgebers – das sollte vor einem
 
 ## 8. Fahrplan
 
-**Erledigt (Version 0.1 – dieser Stand)**
-- Datenmodell, Rechte, Änderungsprotokoll, Feiertage
-- Kalender mit Pinsel, Zell-Dialog mit Verlauf, Tages- und Jahresansicht, gespeicherte Ansichten
-- Verwaltung: Abteilungen/Teams, Mitarbeiter, Benutzer & Rechte, Eintragsarten, Einstellungen, Protokoll
-- Live-Aktualisierung, Konflikterkennung, PWA, Docker-Betrieb
+**Erledigt** (Details je Version im [CHANGELOG](../CHANGELOG.md))
+- 0.1: Datenmodell, Rechte, Änderungsprotokoll, Feiertage; Kalender mit Pinsel, Zell-Dialog mit Verlauf, Tages- und
+  Jahresansicht, gespeicherte Ansichten; Verwaltung; Live-Aktualisierung, Konflikterkennung, PWA, Docker-Betrieb
+- 0.2: Cloudflare Tunnel, Port einstellbar
+- 0.3: Rückgängig mit Meldungen, lesbares Protokoll, Jahresübersicht drucken/PDF, Versionsnummer und Changelog,
+  bis zu 3 Dienste pro Tag, volle Kalenderbreite, Schriftgröße, Feiertage verwalten, Beispieldaten
 
 **Als Nächstes**
-1. Import der bisherigen Daten aus schichtplaner.de (CSV/Excel-Export) und Export (Excel/PDF/Druckansicht)
+1. Import der bisherigen Daten aus schichtplaner.de (CSV/Excel-Export) und Export des Monatsplans (Excel/PDF)
 2. Tastaturbedienung im Kalender (Pfeiltasten + Kürzel tippen, wie in einer Tabellenkalkulation), Kopieren/Einfügen
 3. Mobile Kalenderansicht (Wochenliste pro Person statt breiter Tabelle), „Mein Plan“ als Startseite auf dem Handy
 4. Mindestbesetzung je Team/Dienst mit Warnung bei Unterschreitung

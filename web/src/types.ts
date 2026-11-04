@@ -61,6 +61,8 @@ export interface Bootstrap {
   entryTypes: EntryType[];
   users: { id: number; displayName: string }[];
   settings: { holidayState: string };
+  /** installierte Version (package.json) */
+  version: string;
 }
 export interface ViewConfig {
   kind: 'month' | 'day' | 'year';

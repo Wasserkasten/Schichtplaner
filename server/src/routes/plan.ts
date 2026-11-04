@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireUser, type AppContext } from '../app.js';
 import { getSetting } from '../db.js';
+import { APP_VERSION } from '../version.js';
 import { EntryContext, type EntryRow } from '../entries.js';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -86,6 +87,7 @@ export async function planRoutes(app: FastifyInstance, { db, hub }: AppContext) 
       entryTypes,
       users,
       settings: { holidayState: getSetting(db, 'holiday_state', 'NW') },
+      version: APP_VERSION,
     };
   });
 

@@ -35,6 +35,10 @@ function migrate(db: DB): void {
   const has = (table: string, col: string) =>
     (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).some((c) => c.name === col);
   if (!has('users', 'font_scale')) db.exec('ALTER TABLE users ADD COLUMN font_scale REAL NOT NULL DEFAULT 1');
+  // Änderungs-ID: alle Protokollzeilen einer Aktion (z. B. ein Pinselstrich) gehören zusammen und lassen sich gemeinsam zurücknehmen
+  if (!has('audit_log', 'change_id')) db.exec('ALTER TABLE audit_log ADD COLUMN change_id TEXT');
+  if (!has('audit_log', 'undo_of')) db.exec('ALTER TABLE audit_log ADD COLUMN undo_of TEXT');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_audit_change ON audit_log(change_id)');
 }
 
 export function getSetting(db: DB, key: string, fallback = ''): string {
@@ -57,11 +61,15 @@ export function audit(
     date?: string | null;
     before?: unknown;
     after?: unknown;
+    /** gemeinsame ID aller Zeilen einer Aktion */
+    changeId?: string | null;
+    /** bei einer Rücknahme: die zurückgenommene Änderungs-ID */
+    undoOf?: string | null;
   },
 ): void {
   db.prepare(
-    `INSERT INTO audit_log(user_id, action, entity, entity_id, employee_id, date, before_json, after_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO audit_log(user_id, action, entity, entity_id, employee_id, date, before_json, after_json, change_id, undo_of)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     a.userId,
     a.action,
@@ -71,5 +79,7 @@ export function audit(
     a.date ?? null,
     a.before === undefined ? null : JSON.stringify(a.before),
     a.after === undefined ? null : JSON.stringify(a.after),
+    a.changeId ?? null,
+    a.undoOf ?? null,
   );
 }

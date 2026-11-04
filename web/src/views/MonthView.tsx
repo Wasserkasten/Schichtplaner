@@ -99,13 +99,12 @@ export function MonthView({ nav, setNav }: { nav: NavState; setNav: (n: NavState
     }
     if (cells.length === 0) return;
     try {
-      const res = await post<{ created: Entry[]; deleted: number[]; skipped: number }>('/api/entries/bulk', {
+      const res = await post<{ created: Entry[]; deleted: number[]; skipped: number; changeId: string }>('/api/entries/bulk', {
         action: brush === 'clear' ? 'clear' : s.add ? 'add' : 'set',
         typeId: brush === 'clear' ? undefined : brush,
         cells,
       });
-      store.remove(res.deleted);
-      store.upsert(res.created);
+      store.applyChange(res.changeId, { created: res.created, deletedIds: res.deleted });
       if (res.skipped) store.toast(`${res.skipped} ${res.skipped === 1 ? 'Tag' : 'Tage'} übersprungen: dort schon eingetragen oder bereits 3 Dienste.`);
     } catch (e) {
       reportError(e);

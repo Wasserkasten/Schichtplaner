@@ -334,6 +334,33 @@ Nach dem Einfügen per Kommandozeile die Seite im Browser einmal neu laden.
 
 > Für den echten Betrieb die Beispielkonten nicht stehen lassen: Ihr Passwort ist öffentlich bekannt.
 
+### 3.10 Rückgängig, Protokoll und Drucken
+
+**Rückgängig (für alle Benutzer):** Nach jeder eigenen Änderung im Plan erscheint unten links eine Meldung, z. B.
+„U eingetragen · Becker, Anna · 11.–13.11.“, mit **↶ Rückgängig**. Mehrere Meldungen können gleichzeitig offen sein,
+jede lässt sich einzeln zurücknehmen und danach mit **↷ Wiederholen** wieder anwenden.
+
+- Ältere Änderungen der aktuellen Sitzung: Knopf **↶** oben rechts in der Kopfzeile.
+- Tastatur: **Strg+Z** nimmt die letzte Änderung zurück, **Strg+Y** wiederholt sie (Mac: ⌘).
+- Ein Pinselstrich über mehrere Tage oder Mitarbeiter ist **eine** Änderung und wird als Ganzes zurückgenommen.
+- Hat ein Kollege einen der Einträge inzwischen geändert, wird **nichts** zurückgenommen – die Meldung sagt, wer es war.
+  So überschreibt Rückgängig nie die Arbeit anderer.
+
+**Protokoll (Administratoren):** *Verwaltung → Protokoll* listet jede Änderung als eine Zeile in Klartext
+(„S eingetragen (statt K) · Hoffmann, David · So 15.11.“, „Mitarbeiter angelegt: …“, „Feiertag gelöscht: …“).
+Änderungen über mehrere Tage lassen sich mit **▸ Einzeländerungen** aufklappen. **Verlauf** öffnet den Verlauf der
+betroffenen Zelle wie im Kalender, **↶ Rückgängig** nimmt eine Planänderung zurück (auch die anderer Benutzer).
+Filter und Suche helfen beim Finden; ältere Einträge über *Ältere laden*.
+
+**Jahresübersicht drucken / als PDF:** im Jahreskalender
+
+- **🖨 Drucken** – Druckansicht auf A4 quer, ohne Bedienelemente. Im Druckdialog kann auch *Als PDF speichern* gewählt werden.
+- **⬇ PDF** – fertige PDF-Datei für den gewählten Mitarbeiter.
+- **⬇ PDF ganzes Team** – eine Datei mit einer Seite je Mitarbeiter des Teams.
+
+Die PDF enthält Dienste und Abwesenheiten in Farbe, Wochenenden, Feiertage und arbeitsfreie Tage, das Urlaubskonto und
+eine Auswertung je Eintragsart. Vertrauliche Arten (z. B. Krank) erscheinen wie im Browser nur für Berechtigte im Klartext.
+
 ---
 
 ## 4. Betrieb
@@ -360,6 +387,10 @@ git pull
 docker compose up -d --build
 docker image prune -f                # alte Images aufräumen
 ```
+
+Welche Version läuft und was sich geändert hat, steht unter *Verwaltung → Info* (Versionsnummer und Changelog); nach einem
+Update weist ein gelber Hinweis die Administratoren darauf hin. Von außen prüfbar: `https://plan.example.de/api/health`
+liefert z. B. `{"ok":true,"version":"0.3.0"}`.
 
 Die Datenbank wird beim Start automatisch auf das neue Schema gebracht. Die Unterbrechung dauert nur wenige Sekunden;
 offene Browser verbinden sich selbst neu (der Punkt oben rechts ist kurz rot, dann wieder grün).

@@ -6,12 +6,13 @@ import type { SavedView, ViewConfig } from './types';
 import { MonthView } from './views/MonthView';
 import { DayView } from './views/DayView';
 import { YearView } from './views/YearView';
-import { AdminView } from './views/AdminView';
+import { AdminView, type AdminTab } from './views/AdminView';
 import { LoginView } from './views/LoginView';
 import { TeamFilter } from './components/TeamFilter';
 import { ViewMenu } from './components/ViewMenu';
 import { PasswordDialog } from './components/PasswordDialog';
 import { Toasts } from './components/Toasts';
+import { ChangeHistoryMenu, ChangePopups } from './components/ChangeNotices';
 import { FONT_STEPS, applyFontScale, nextStep, saveFontScale } from './fontScale';
 import { reportError } from './helpers';
 
@@ -45,6 +46,14 @@ export function App() {
   const [nav, setNav] = useState<NavState>({ kind: 'month', date: today(), teamIds: [], employeeId: null, days: 0, ...fromHash() });
   const [views, setViews] = useState<SavedView[]>([]);
   const [pwOpen, setPwOpen] = useState(false);
+  const [adminTab, setAdminTab] = useState<AdminTab | undefined>(undefined);
+  const [seenVersion, setSeenVersion] = useState(() => {
+    try {
+      return localStorage.getItem('sp-seen-version');
+    } catch {
+      return null;
+    }
+  });
 
   async function init() {
     try {
@@ -73,6 +82,12 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    const onSeen = (e: Event) => setSeenVersion((e as CustomEvent<string>).detail);
+    window.addEventListener('sp-version-seen', onSeen);
+    return () => window.removeEventListener('sp-version-seen', onSeen);
+  }, []);
+
+  useEffect(() => {
     if (state === 'ready' && location.hash !== toHash(nav)) history.replaceState(null, '', toHash(nav));
   }, [nav, state]);
 
@@ -98,7 +113,7 @@ export function App() {
   const boot = st.boot;
   const canAdmin = boot.me.isAdmin || boot.teams.some((t) => t.level === 'manage');
   const tab = (k: Kind, label: string) => (
-    <button className={nav.kind === k ? 'tab active' : 'tab'} onClick={() => setNav({ ...nav, kind: k })}>
+    <button className={nav.kind === k ? 'tab active' : 'tab'} onClick={() => { setAdminTab(undefined); setNav({ ...nav, kind: k }); }}>
       {label}
     </button>
   );
@@ -125,6 +140,7 @@ export function App() {
           />
         )}
         <div className="spacer" />
+        <ChangeHistoryMenu />
         <span className={st.live ? 'live on' : 'live'} title={st.live ? 'Live-Aktualisierung aktiv' : 'Keine Live-Verbindung'}>
           ●
         </span>
@@ -137,13 +153,26 @@ export function App() {
           </div>
         </details>
       </header>
+      {boot.me.isAdmin && boot.version && seenVersion !== boot.version && (
+        <div className="update-banner">
+          Der Schichtplaner wurde auf Version <strong>{boot.version}</strong> aktualisiert.
+          <button className="link" onClick={() => { setAdminTab('info'); setNav({ ...nav, kind: 'admin' }); setSeenVersion(boot.version); }}>
+            Was ist neu?
+          </button>
+          <button className="icon" aria-label="Hinweis schließen" onClick={() => {
+            try { localStorage.setItem('sp-seen-version', boot.version); } catch { /* egal */ }
+            setSeenVersion(boot.version);
+          }}>✕</button>
+        </div>
+      )}
       <main>
         {nav.kind === 'month' && <MonthView nav={nav} setNav={setNav} />}
         {nav.kind === 'day' && <DayView nav={nav} setNav={setNav} />}
         {nav.kind === 'year' && <YearView nav={nav} setNav={setNav} />}
-        {nav.kind === 'admin' && <AdminView />}
+        {nav.kind === 'admin' && <AdminView key={adminTab ?? 'default'} initialTab={adminTab} />}
       </main>
       {pwOpen && <PasswordDialog forced={boot.me.mustChangePassword} onClose={() => { setPwOpen(false); void store.loadBootstrap(); }} />}
+      <ChangePopups />
       <Toasts />
     </div>
   );

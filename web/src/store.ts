@@ -1,8 +1,24 @@
 import { useSyncExternalStore } from 'react';
-import { get } from './api';
+import { get, post } from './api';
+import { describeEntries, type ChangeParts } from './describe';
 import type { Bootstrap, Entry, Holiday } from './types';
 
 type Listener = () => void;
+
+/** Eine eigene Änderung dieser Sitzung – mit Rückgängig/Wiederholen. */
+export interface ChangeNotice {
+  id: number;
+  /** Änderungs-ID, die beim nächsten Klick zurückgenommen wird (nach „Rückgängig“ die der Rücknahme) */
+  changeId: string;
+  text: string;
+  at: Date;
+  state: 'done' | 'undone' | 'busy';
+  /** solange gesetzt und in der Zukunft, wird die Meldung unten eingeblendet */
+  popupUntil: number;
+}
+
+const POPUP_MS = 12_000;
+const MAX_NOTICES = 30;
 
 /**
  * Zentraler Client-Zustand: Stammdaten, geladene Einträge, Feiertage.
@@ -14,6 +30,7 @@ class Store {
   holidays = new Map<number, Holiday[]>();
   live = false;
   toasts: { id: number; text: string; kind: 'info' | 'error' }[] = [];
+  notices: ChangeNotice[] = [];
 
   private version = 0;
   private cellIndex: Map<string, Entry[]> | null = null;
@@ -43,6 +60,49 @@ class Store {
     }, kind === 'error' ? 6000 : 3500);
   }
 
+  /**
+   * Ergebnis einer eigenen Änderung übernehmen und als Meldung mit „Rückgängig“ anzeigen.
+   * `deletedIds` werden vor dem Entfernen nachgeschlagen, damit die Meldung sagen kann, was gelöscht wurde.
+   */
+  applyChange(changeId: string | undefined, c: { created?: Entry[]; deletedIds?: number[]; updated?: { before: Entry; after: Entry } }) {
+    const removed = (c.deletedIds ?? []).map((id) => this.entries.get(id)).filter((e): e is Entry => !!e);
+    this.remove(c.deletedIds ?? []);
+    this.upsert([...(c.created ?? []), ...(c.updated ? [c.updated.after] : [])]);
+    const parts: ChangeParts = { created: c.created, removed, updated: c.updated ? [c.updated] : [] };
+    if (!changeId || (!c.created?.length && !removed.length && !c.updated) || !this.boot) return;
+    const n: ChangeNotice = { id: Date.now() + Math.random(), changeId, text: describeEntries(this.boot, parts), at: new Date(), state: 'done', popupUntil: Date.now() + POPUP_MS };
+    this.notices = [n, ...this.notices].slice(0, MAX_NOTICES);
+    this.emit();
+    setTimeout(() => this.emit(), POPUP_MS + 50); // Meldung ausblenden
+  }
+
+  /** Änderung zurücknehmen (state 'done') bzw. die Rücknahme wiederholen (state 'undone'). */
+  async toggleUndo(id: number) {
+    const n = this.notices.find((x) => x.id === id);
+    if (!n || n.state === 'busy') return;
+    const wasDone = n.state === 'done';
+    this.patchNotice(id, { state: 'busy' });
+    try {
+      const res = await post<{ changeId: string; upserted: Entry[]; deleted: number[] }>(`/api/changes/${n.changeId}/undo`);
+      this.remove(res.deleted);
+      this.upsert(res.upserted);
+      this.patchNotice(id, { state: wasDone ? 'undone' : 'done', changeId: res.changeId, popupUntil: Date.now() + POPUP_MS });
+      setTimeout(() => this.emit(), POPUP_MS + 50);
+    } catch (e) {
+      this.patchNotice(id, { state: wasDone ? 'done' : 'undone' });
+      this.toast((e as Error).message, 'error');
+    }
+  }
+
+  dismissNotice(id: number) {
+    this.patchNotice(id, { popupUntil: 0 });
+  }
+
+  private patchNotice(id: number, p: Partial<ChangeNotice>) {
+    this.notices = this.notices.map((x) => (x.id === id ? { ...x, ...p } : x));
+    this.emit();
+  }
+
   async loadBootstrap() {
     this.boot = await get<Bootstrap>('/api/bootstrap');
     this.emit();
@@ -50,6 +110,7 @@ class Store {
   }
 
   reset() {
+    this.notices = [];
     this.es?.close();
     this.es = null;
     this.boot = null;
