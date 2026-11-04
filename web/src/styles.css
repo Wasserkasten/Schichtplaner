@@ -308,3 +308,8 @@ details > summary.plain::after { content: ''; }
 .radio-list { display: flex; flex-direction: column; gap: 4px; }
 .radio-list label { flex-direction: row !important; align-items: flex-start; gap: 6px !important; color: var(--text) !important; }
 .sub-form { border-left: 3px solid var(--accent-soft); padding-left: 10px; }
+
+/* Tage außerhalb der Beschäftigung bzw. vor dem Planungsbeginn */
+.plan td.outside { background: repeating-linear-gradient(135deg, var(--we) 0 4px, var(--panel) 4px 8px) !important; cursor: not-allowed; }
+.swatch.outside-swatch { background: repeating-linear-gradient(135deg, var(--line-strong) 0 2px, transparent 2px 4px); }
+.employment { white-space: nowrap; }

@@ -42,6 +42,9 @@ function migrate(db: DB): void {
   if (!has('audit_log', 'undo_of')) db.exec('ALTER TABLE audit_log ADD COLUMN undo_of TEXT');
   db.exec('CREATE INDEX IF NOT EXISTS idx_audit_change ON audit_log(change_id)');
   // Neuigkeiten: bis zu welcher Version hat der Benutzer die Hinweise gesehen bzw. „Wichtiges“ bestätigt?
+  // Eintritts-/Austrittsdatum (ISO); außerhalb sind keine Einträge möglich
+  if (!has('employees', 'entry_date')) db.exec('ALTER TABLE employees ADD COLUMN entry_date TEXT');
+  if (!has('employees', 'exit_date')) db.exec('ALTER TABLE employees ADD COLUMN exit_date TEXT');
   if (!has('users', 'seen_version')) db.exec('ALTER TABLE users ADD COLUMN seen_version TEXT');
   if (!has('users', 'ack_version')) db.exec('ALTER TABLE users ADD COLUMN ack_version TEXT');
   // Neue Konten sollen keine alten Neuigkeiten sehen: beim Anlegen auf die laufende Version setzen

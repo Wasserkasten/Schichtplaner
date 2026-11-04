@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { del, get, patch, post } from '../api';
 import { store, useStore } from '../store';
 import { addDays, fmtLong, isWeekend } from '../dates';
-import { canEditEmployee, fullName, reportError, typeMap } from '../helpers';
+import { blockedReason, canEditEmployee, fullName, reportError, typeMap } from '../helpers';
 import type { Entry } from '../types';
 import { Modal } from './Modal';
 import { EntryChip } from './EntryChip';
@@ -23,6 +23,7 @@ export function CellEditor({ employeeId, date, onClose, initialTab = 'edit' }: {
   const types = typeMap(boot);
   const emp = boot.employees.find((e) => e.id === employeeId)!;
   const entries = st.cell(employeeId, date);
+  const blocked = blockedReason(boot, emp, date);
   const editable = canEditEmployee(boot, employeeId);
   const [tab, setTab] = useState<'edit' | 'history'>(initialTab);
   // aus dem Protokoll geöffnet: der Tag ist evtl. noch nicht geladen
@@ -40,7 +41,8 @@ export function CellEditor({ employeeId, date, onClose, initialTab = 'edit' }: {
         <>
           {entries.length === 0 && <p className="muted">Kein Eintrag.</p>}
           {entries.map((e) => (editable && !e.masked ? <EntryEditRow key={e.id} e={e} /> : <div key={e.id} className="entry-row"><EntryChip e={e} types={types} long /></div>))}
-          {editable && <NewEntry employeeId={employeeId} date={date} />}
+          {editable && blocked && <p className="small warn">Kein neuer Eintrag möglich: {blocked}. Vorhandene Einträge können nur noch gelöscht werden.</p>}
+          {editable && !blocked && <NewEntry employeeId={employeeId} date={date} />}
           {!editable && <p className="muted small">Du hast für dieses Team nur Leserechte.</p>}
         </>
       ) : (

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { HttpError, requireUser, type AppContext } from '../app.js';
 import { audit } from '../db.js';
 import { EntryContext, toDTO, type EntryDTO, type EntryRow } from '../entries.js';
+import { createEmploymentCheck } from '../employment.js';
 import type { Permissions } from '../permissions.js';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -107,6 +108,8 @@ export async function entryRoutes(app: FastifyInstance, { db, hub }: AppContext)
     const changeId = randomUUID();
     const row = db.transaction(() => {
       assertRoom(body.employeeId, body.date, body.typeId);
+      const reason = createEmploymentCheck(db)(body.employeeId, body.date);
+      if (reason) throw new HttpError(422, `Nicht möglich: ${reason}.`);
       return insert(user.id, body, changeId);
     })();
     publish('upsert', [row], user.id);
@@ -141,6 +144,9 @@ export async function entryRoutes(app: FastifyInstance, { db, hub }: AppContext)
       if (next.type_id !== cur.type_id || next.employee_id !== cur.employee_id || next.date !== cur.date) {
         assertRoom(next.employee_id, next.date, next.type_id, cur.id);
       }
+      // auch vorhandene Einträge außerhalb der Beschäftigung (z. B. nach dem Austritt behalten) nur noch löschen, nicht ändern
+      const reason = createEmploymentCheck(db)(next.employee_id, next.date);
+      if (reason) throw new HttpError(422, `Nicht möglich: ${reason}.`);
       db.prepare(
         `UPDATE entries SET employee_id=?, date=?, type_id=?, text=?, start_time=?, end_time=?,
            version = version + 1, updated_by = ?, updated_at = datetime('now') WHERE id = ?`,
@@ -205,7 +211,13 @@ export async function entryRoutes(app: FastifyInstance, { db, hub }: AppContext)
       const created: EntryRow[] = [];
       const deleted: EntryRow[] = [];
       let skipped = 0; // Zellen, in denen nichts hinzugefügt wurde (schon vorhanden bzw. voll)
+      let outside = 0; // Zellen außerhalb der Beschäftigung bzw. vor dem Planungsbeginn
+      const allowed = createEmploymentCheck(db);
       for (const c of body.cells) {
+        if (body.action !== 'clear' && allowed(c.employeeId, c.date)) {
+          outside++;
+          continue;
+        }
         const existing = db
           .prepare('SELECT * FROM entries WHERE employee_id = ? AND date = ?')
           .all(c.employeeId, c.date) as EntryRow[];
@@ -244,12 +256,12 @@ export async function entryRoutes(app: FastifyInstance, { db, hub }: AppContext)
           );
         }
       }
-      return { created, deleted, skipped };
+      return { created, deleted, skipped, outside };
     })();
 
     publish('delete', result.deleted, user.id);
     publish('upsert', result.created, user.id);
-    return { created: result.created.map(toDTO), deleted: result.deleted.map((d) => d.id), skipped: result.skipped, changeId };
+    return { created: result.created.map(toDTO), deleted: result.deleted.map((d) => d.id), skipped: result.skipped, outside: result.outside, changeId };
   });
 
   /**
@@ -275,6 +287,11 @@ export async function entryRoutes(app: FastifyInstance, { db, hub }: AppContext)
     const changedMeanwhile = (cur: EntryRow) =>
       new HttpError(409, `Kann nicht rückgängig gemacht werden: ${nameOf(cur.updated_by)} hat den Eintrag am ${cur.date.split('-').reverse().join('.')} inzwischen geändert.`);
 
+    const allowed = createEmploymentCheck(db);
+    const assertAllowed = (employeeId: number, date: string) => {
+      const reason = allowed(employeeId, date);
+      if (reason) throw new HttpError(409, `Kann nicht rückgängig gemacht werden: ${reason}.`);
+    };
     const result = db.transaction(() => {
       const upserted = new Map<number, EntryRow>();
       const deleted: EntryRow[] = [];
@@ -311,6 +328,7 @@ export async function entryRoutes(app: FastifyInstance, { db, hub }: AppContext)
               throw new HttpError(409, `Kann nicht rückgängig gemacht werden: Am ${before.date.split('-').reverse().join('.')} sind inzwischen schon ${MAX_TYPED_PER_CELL} Dienste eingetragen.`);
             }
           }
+          assertAllowed(before.employeeId, before.date);
           const idFree = !getEntry.get(before.id);
           const info = db
             .prepare(
@@ -332,6 +350,7 @@ export async function entryRoutes(app: FastifyInstance, { db, hub }: AppContext)
           if (before.typeId !== cur.type_id || before.employeeId !== cur.employee_id || before.date !== cur.date) {
             assertRoom(before.employeeId, before.date, before.typeId, cur.id);
           }
+          assertAllowed(before.employeeId, before.date);
           db.prepare(
             `UPDATE entries SET employee_id=?, date=?, type_id=?, text=?, start_time=?, end_time=?,
                version = version + 1, updated_by = ?, updated_at = datetime('now') WHERE id = ?`,

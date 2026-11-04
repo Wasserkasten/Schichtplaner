@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { NavState } from '../App';
 import { store, useStore } from '../store';
 import { addDays, fmtLong, today } from '../dates';
-import { canEditEmployee, groupedEmployees, reportError, teamLabel, typeMap } from '../helpers';
+import { canEditEmployee, groupedEmployees, minPlanDate, reportError, teamLabel, typeMap } from '../helpers';
 import type { Employee, Entry, EntryType } from '../types';
 import { EntryChip } from '../components/EntryChip';
 import { CellEditor } from '../components/CellEditor';
@@ -19,7 +19,8 @@ export function DayView({ nav, setNav }: { nav: NavState; setNav: (n: NavState) 
     store.loadRange(date, date).catch(reportError);
   }, [date]);
 
-  const groups = groupedEmployees(boot, nav.teamIds);
+  const groups = groupedEmployees(boot, nav.teamIds, { from: date, to: date }); // nur an diesem Tag Beschäftigte
+  const minDate = minPlanDate(boot, today());
   const teamName = new Map(boot.teams.map((t) => [t.id, teamLabel(boot, t.id)]));
   const holiday = st.holidayOn(date);
 
@@ -80,10 +81,10 @@ export function DayView({ nav, setNav }: { nav: NavState; setNav: (n: NavState) 
   return (
     <div className="day">
       <div className="toolbar">
-        <button onClick={() => setNav({ ...nav, date: addDays(date, -1) })} aria-label="Vortag">◀</button>
+        <button onClick={() => setNav({ ...nav, date: addDays(date, -1) })} aria-label="Vortag" disabled={date <= minDate}>◀</button>
         <button onClick={() => setNav({ ...nav, date: today() })}>Heute</button>
         <button onClick={() => setNav({ ...nav, date: addDays(date, 1) })} aria-label="Folgetag">▶</button>
-        <input type="date" value={date} onChange={(e) => e.target.value && setNav({ ...nav, date: e.target.value })} />
+        <input type="date" value={date} min={minDate} onChange={(e) => e.target.value && setNav({ ...nav, date: e.target.value < minDate ? minDate : e.target.value })} />
         <h1>{fmtLong(date)}</h1>
         {holiday && <span className={holiday.kind === 'company' ? 'badge free' : 'badge'}>{holiday.name}{holiday.kind === 'company' ? ' · arbeitsfrei' : ''}</span>}
       </div>

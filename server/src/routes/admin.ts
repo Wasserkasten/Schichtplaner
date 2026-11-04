@@ -101,16 +101,22 @@ export async function adminRoutes(app: FastifyInstance, { db, hub }: AppContext)
     sortOrder: z.number().int().default(0),
     active: z.boolean().default(true),
     vacationDaysPerYear: z.number().min(0).max(365).default(30),
+    entryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+    exitDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   });
+  const assertDates = (b: { entryDate?: string | null; exitDate?: string | null }) => {
+    if (b.entryDate && b.exitDate && b.exitDate < b.entryDate) throw new HttpError(400, 'Das Austrittsdatum liegt vor dem Eintrittsdatum');
+  };
   const empValues = (b: z.infer<typeof empBody>) =>
-    [b.teamId, b.firstName, b.lastName, b.shortName || null, b.personnelNo || null, b.sortOrder, b.active ? 1 : 0, b.vacationDaysPerYear] as const;
+    [b.teamId, b.firstName, b.lastName, b.shortName || null, b.personnelNo || null, b.sortOrder, b.active ? 1 : 0, b.vacationDaysPerYear, b.entryDate || null, b.exitDate || null] as const;
 
   function insertEmployee(b: z.infer<typeof empBody>): number {
+    assertDates(b);
     return Number(
       db
         .prepare(
-          `INSERT INTO employees(team_id, first_name, last_name, short_name, personnel_no, sort_order, active, vacation_days_per_year)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO employees(team_id, first_name, last_name, short_name, personnel_no, sort_order, active, vacation_days_per_year, entry_date, exit_date)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(...empValues(b)).lastInsertRowid,
     );
@@ -157,19 +163,35 @@ export async function adminRoutes(app: FastifyInstance, { db, hub }: AppContext)
   app.put('/api/admin/employees/:id', async (req) => {
     const { user, perms } = requireUser(req);
     const { id } = idParam.parse(req.params);
-    const b = empBody.parse(req.body);
-    return change(user.id, 'employee', 'update', () => {
+    // outsideEntries: was mit vorhandenen Einträgen vor dem Eintritt bzw. nach dem Austritt geschehen soll
+    const b = empBody.extend({ outsideEntries: z.enum(['delete', 'keep']).optional() }).parse(req.body);
+    assertDates(b);
+    const outside = db
+      .prepare('SELECT COUNT(*) n, MIN(date) first, MAX(date) last FROM entries WHERE employee_id = ? AND ((? IS NOT NULL AND date < ?) OR (? IS NOT NULL AND date > ?))')
+      .get(id, b.entryDate || null, b.entryDate || null, b.exitDate || null, b.exitDate || null) as { n: number; first: string; last: string };
+    if (outside.n > 0 && !b.outsideEntries) {
+      throw new HttpError(422, `Es gibt ${outside.n} Einträge außerhalb der Beschäftigung`, { outside: outside.n, first: outside.first, last: outside.last });
+    }
+    let deleted = 0;
+    const result = change(user.id, 'employee', 'update', () => {
       const before = db.prepare('SELECT * FROM employees WHERE id = ?').get(id) as { team_id: number } | undefined;
       if (!before) throw new HttpError(404, 'Nicht gefunden');
       if (!perms.can(before.team_id, 'manage') || !perms.can(b.teamId, 'manage')) {
         throw new HttpError(403, 'Keine Berechtigung für dieses Team');
       }
       db.prepare(
-        `UPDATE employees SET team_id=?, first_name=?, last_name=?, short_name=?, personnel_no=?, sort_order=?, active=?, vacation_days_per_year=?
-         WHERE id = ?`,
+        `UPDATE employees SET team_id=?, first_name=?, last_name=?, short_name=?, personnel_no=?, sort_order=?, active=?, vacation_days_per_year=?,
+           entry_date=?, exit_date=? WHERE id = ?`,
       ).run(...empValues(b), id);
-      return { id, before, after: b };
+      if (outside.n > 0 && b.outsideEntries === 'delete') {
+        deleted = db
+          .prepare('DELETE FROM entries WHERE employee_id = ? AND ((? IS NOT NULL AND date < ?) OR (? IS NOT NULL AND date > ?))')
+          .run(id, b.entryDate || null, b.entryDate || null, b.exitDate || null, b.exitDate || null).changes;
+      }
+      return { id, before, after: { ...b, deletedOutsideEntries: deleted || undefined } };
     });
+    if (deleted) hub.broadcast('masterdata', () => ({ entity: 'employee', reloadEntries: true })); // offene Pläne neu laden
+    return { ...result, deletedOutsideEntries: deleted };
   });
   app.delete('/api/admin/employees/:id', async (req) => {
     const { user } = requireAdmin(req); // endgültiges Löschen inkl. aller Einträge nur durch Admins
@@ -381,6 +403,7 @@ export async function adminRoutes(app: FastifyInstance, { db, hub }: AppContext)
       holidayState: getSetting(db, 'holiday_state', 'NW'),
       ownTeamLevel: getSetting(db, 'own_team_level', 'edit'),
       defaultLevel: getSetting(db, 'default_level', 'view'),
+      planStart: getSetting(db, 'plan_start', '') || null,
     };
   });
   app.put('/api/admin/settings', async (req) => {
@@ -390,6 +413,7 @@ export async function adminRoutes(app: FastifyInstance, { db, hub }: AppContext)
         holidayState: z.enum(['BW', 'BY', 'BE', 'BB', 'HB', 'HH', 'HE', 'MV', 'NI', 'NW', 'RP', 'SL', 'SN', 'ST', 'SH', 'TH']),
         ownTeamLevel: z.enum(['none', 'view', 'edit', 'manage']),
         defaultLevel: z.enum(['none', 'view', 'edit']),
+        planStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
       })
       .parse(req.body);
     const stateChanged = b.holidayState !== getSetting(db, 'holiday_state', 'NW');
@@ -399,6 +423,7 @@ export async function adminRoutes(app: FastifyInstance, { db, hub }: AppContext)
       if (stateChanged) resyncOfficial(db);
       setSetting(db, 'own_team_level', b.ownTeamLevel);
       setSetting(db, 'default_level', b.defaultLevel);
+      if (b.planStart !== undefined) setSetting(db, 'plan_start', b.planStart ?? '');
       return { id: 0, after: b, ret: b };
     });
     if (stateChanged) hub.broadcast('holidays', () => ({}));

@@ -22,6 +22,9 @@ export interface Employee {
   sortOrder: number;
   active: boolean;
   vacationDaysPerYear: number;
+  /** Eintritt/Austritt (ISO) – außerhalb sind keine Einträge möglich */
+  entryDate: string | null;
+  exitDate: string | null;
 }
 export interface EntryType {
   id: number;
@@ -60,7 +63,8 @@ export interface Bootstrap {
   employees: Employee[];
   entryTypes: EntryType[];
   users: { id: number; displayName: string }[];
-  settings: { holidayState: string };
+  /** planStart: eingestellter Planungsbeginn; dataStart: frühestes Datum mit Daten (Eintrag oder Eintritt) */
+  settings: { holidayState: string; planStart: string | null; dataStart: string | null };
   /** installierte Version (package.json) */
   version: string;
 }

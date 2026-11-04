@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { api, del, get, post, put } from '../api';
+import { ApiError, api, del, get, post, put } from '../api';
 import { store, useStore } from '../store';
+import { today } from '../dates';
 import { departmentName, fullName, reportError, sortedTeams, teamLabel, teamsByDepartment } from '../helpers';
 import type { Employee, EntryType, Level } from '../types';
 import { Modal } from '../components/Modal';
@@ -93,7 +94,7 @@ function Employees() {
         {isAdmin && withoutAccount > 0 && <span className="muted small">{withoutAccount} aktive Mitarbeiter ohne Benutzerkonto</span>}
       </div>
       <table className="simple">
-        <thead><tr><th>Name</th><th>Kürzel</th><th>Abteilung</th><th>Team</th><th>Pers.-Nr.</th><th>Urlaub/Jahr</th>{isAdmin && <th>Konto</th>}<th /></tr></thead>
+        <thead><tr><th>Name</th><th>Kürzel</th><th>Abteilung</th><th>Team</th><th>Pers.-Nr.</th><th>Beschäftigt</th><th>Urlaub/Jahr</th>{isAdmin && <th>Konto</th>}<th /></tr></thead>
         <tbody>
           {boot!.employees
             .filter((e) => showInactive || e.active)
@@ -108,6 +109,7 @@ function Employees() {
                   <td>{team ? departmentName(boot!, team.departmentId) : ''}</td>
                   <td>{team?.name}</td>
                   <td>{e.personnelNo}</td>
+                  <td className="employment small">{employment(e)}</td>
                   <td>{e.vacationDaysPerYear}</td>
                   {isAdmin && (
                     <td>
@@ -153,6 +155,18 @@ function Employees() {
   );
 }
 
+/** „seit 01.03.2024“, „bis 31.12.2026“, „ausgeschieden 30.06.2026“ … */
+function employment(e: Employee): string {
+  const d = (x: string) => x.split('-').reverse().join('.');
+  const now = today();
+  if (e.exitDate && e.exitDate < now) return `ausgeschieden ${d(e.exitDate)}`;
+  if (e.entryDate && e.entryDate > now) return `ab ${d(e.entryDate)}`;
+  if (e.entryDate && e.exitDate) return `${d(e.entryDate)} – ${d(e.exitDate)}`;
+  if (e.exitDate) return `bis ${d(e.exitDate)}`;
+  if (e.entryDate) return `seit ${d(e.entryDate)}`;
+  return '';
+}
+
 /** Benutzername aus Vor- und Nachname vorschlagen; bei Bedarf mit Zahl, falls schon vergeben. */
 function freeUsername(first: string, last: string, taken: Set<string>): string {
   const base = usernameSuggestion(first, last);
@@ -184,6 +198,8 @@ function AccountForEmployee({ emp, taken, onClose }: { emp: Employee; taken: Set
   );
 }
 
+interface OutsideInfo { outside: number; first: string; last: string }
+
 function EmployeeForm({ value, onClose }: { value: Partial<Employee>; onClose: (r?: LinkResult) => void }) {
   const { boot } = useStore();
   const isAdmin = boot!.me.isAdmin;
@@ -191,16 +207,26 @@ function EmployeeForm({ value, onClose }: { value: Partial<Employee>; onClose: (
   const [withAccount, setWithAccount] = useState(!value.id && isAdmin);
   const [username, setUsername] = useState('');
   const [usernameTouched, setUsernameTouched] = useState(false);
+  const [outsidePrompt, setOutsidePrompt] = useState<OutsideInfo | null>(null);
   const set = (k: keyof Employee, val: unknown) => setV({ ...v, [k]: val });
   // Benutzername folgt dem Namen, bis er von Hand geändert wurde
   useEffect(() => {
     if (!usernameTouched) setUsername(usernameSuggestion(v.firstName ?? '', v.lastName ?? ''));
   }, [v.firstName, v.lastName, usernameTouched]);
 
-  async function save() {
-    const body = { ...v, shortName: v.shortName || null, personnelNo: v.personnelNo || null };
+  async function save(outsideEntries?: 'delete' | 'keep') {
+    const body = { ...v, shortName: v.shortName || null, personnelNo: v.personnelNo || null, entryDate: v.entryDate || null, exitDate: v.exitDate || null };
     if (v.id) {
-      if (await run(() => put(`/api/admin/employees/${v.id}`, body))) onClose();
+      try {
+        const r = await put<{ deletedOutsideEntries?: number }>(`/api/admin/employees/${v.id}`, { ...body, outsideEntries });
+        await store.loadBootstrap();
+        store.toast(r.deletedOutsideEntries ? `Gespeichert, ${r.deletedOutsideEntries} Einträge gelöscht` : 'Gespeichert');
+        onClose();
+      } catch (e) {
+        // Einträge außerhalb der neuen Beschäftigungszeit: nachfragen
+        if (e instanceof ApiError && e.status === 422 && (e.data as { outside?: number })?.outside) setOutsidePrompt(e.data as OutsideInfo);
+        else reportError(e);
+      }
       return;
     }
     try {
@@ -236,9 +262,25 @@ function EmployeeForm({ value, onClose }: { value: Partial<Employee>; onClose: (
           </select>
         </label>
         <label>Urlaubstage/Jahr<input type="number" min={0} value={v.vacationDaysPerYear ?? 30} onChange={(e) => set('vacationDaysPerYear', Number(e.target.value))} /></label>
+        <label>Eintritt<input type="date" value={v.entryDate ?? ''} onChange={(e) => set('entryDate', e.target.value || null)} /></label>
+        <label>Austritt<input type="date" value={v.exitDate ?? ''} min={v.entryDate ?? undefined} onChange={(e) => set('exitDate', e.target.value || null)} /></label>
         <label>Sortierung<input type="number" value={v.sortOrder ?? 0} onChange={(e) => set('sortOrder', Number(e.target.value))} /></label>
         <label className="inline"><input type="checkbox" checked={v.active ?? true} onChange={(e) => set('active', e.target.checked)} /> aktiv</label>
       </div>
+      <p className="small muted">Vor dem Eintritt und nach dem Austritt ist im Plan nichts eintragbar; dort erscheint der Mitarbeiter nicht. Leer = unbegrenzt.</p>
+      {outsidePrompt && (
+        <div className="hint">
+          <p>
+            Nach den neuen Daten liegen <strong>{outsidePrompt.outside} Einträge</strong> außerhalb der Beschäftigung
+            ({outsidePrompt.first.split('-').reverse().join('.')}{outsidePrompt.last !== outsidePrompt.first ? ` – ${outsidePrompt.last.split('-').reverse().join('.')}` : ''}).
+          </p>
+          <div className="row">
+            <button className="danger" onClick={() => void save('delete')}>Diese Einträge löschen</button>
+            <button onClick={() => void save('keep')}>Behalten (nicht mehr änderbar)</button>
+            <button onClick={() => setOutsidePrompt(null)}>Abbrechen</button>
+          </div>
+        </div>
+      )}
       {!v.id && isAdmin && (
         <div className="form sub-form">
           <label className="inline"><input type="checkbox" checked={withAccount} onChange={(e) => setWithAccount(e.target.checked)} /> Benutzerkonto gleich mit anlegen</label>
@@ -255,7 +297,7 @@ function EmployeeForm({ value, onClose }: { value: Partial<Employee>; onClose: (
       )}
       <div className="actions">
         {v.id && boot!.me.isAdmin && <button className="danger" onClick={() => void remove()}>Löschen</button>}
-        <button className="primary" disabled={!v.firstName || !v.lastName || (withAccount && username.trim().length < 2)} onClick={() => void save()}>Speichern</button>
+        <button className="primary" disabled={!v.firstName || !v.lastName || (withAccount && username.trim().length < 2) || !!outsidePrompt} onClick={() => void save()}>Speichern</button>
       </div>
     </Modal>
   );
@@ -646,7 +688,7 @@ function SupportContactSettings() {
 }
 
 function Settings() {
-  const [s, setS] = useState<{ holidayState: string; ownTeamLevel: string; defaultLevel: string } | null>(null);
+  const [s, setS] = useState<{ holidayState: string; ownTeamLevel: string; defaultLevel: string; planStart: string | null } | null>(null);
   useEffect(() => void get<typeof s>('/api/admin/settings').then(setS, reportError), []);
   if (!s) return null;
   return (
@@ -656,6 +698,13 @@ function Settings() {
           {Object.entries(STATES).map(([k, n]) => <option key={k} value={k}>{n}</option>)}
         </select>
         <span className="muted small">Quelle für die gesetzlichen Feiertage. Beim Wechsel werden sie in allen Jahren ausgetauscht; eigene und geänderte Einträge unter <em>Feiertage</em> bleiben erhalten.</span>
+      </label>
+      <label>Planungsbeginn
+        <span className="pw-row">
+          <input type="date" value={s.planStart ?? ''} onChange={(e) => setS({ ...s, planStart: e.target.value || null })} />
+          {s.planStart && <button type="button" onClick={() => setS({ ...s, planStart: null })}>leeren</button>}
+        </span>
+        <span className="muted small">Davor kann weder zurückgeblättert noch eingetragen werden. Leer = automatisch: zurück bis zu den ersten vorhandenen Daten (bei leerem Plan bis zum aktuellen Monat).</span>
       </label>
       <label>Recht aller Benutzer auf alle Teams
         <select value={s.defaultLevel} onChange={(e) => setS({ ...s, defaultLevel: e.target.value })}>
