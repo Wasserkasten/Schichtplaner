@@ -111,6 +111,13 @@ class Store {
     return this.cellIndex.get(`${employeeId}|${date}`) ?? [];
   }
 
+  /** Alle zuletzt angesehenen Zeiträume neu laden (nach Neuverbindung oder größeren Änderungen). */
+  reloadRanges() {
+    // Über eine Kopie iterieren: loadRange() sortiert this.ranges um (löschen + neu anhängen).
+    // Beim Iterieren über die Map selbst würde derselbe Eintrag endlos erneut besucht.
+    for (const r of [...this.ranges.values()]) void this.loadRange(r.from, r.to, r.employeeId).catch(() => {});
+  }
+
   /** Live-Verbindung; verbindet sich bei Abbruch selbst neu und lädt dann die sichtbaren Zeiträume nach. */
   connect() {
     if (this.es) return;
@@ -120,17 +127,18 @@ class Store {
       const wasOffline = !this.live;
       this.live = true;
       this.emit();
-      // Über eine Kopie iterieren: loadRange() sortiert this.ranges um (löschen + neu anhängen).
-      // Beim Iterieren über die Map selbst würde derselbe Eintrag endlos erneut besucht.
-      if (wasOffline) for (const r of [...this.ranges.values()]) void this.loadRange(r.from, r.to, r.employeeId).catch(() => {});
+      if (wasOffline) this.reloadRanges();
     });
     es.addEventListener('entries', (ev) => {
       const msg = JSON.parse((ev as MessageEvent).data) as { action: 'upsert' | 'delete'; items: Entry[] };
       if (msg.action === 'upsert') this.upsert(msg.items);
       else this.remove(msg.items.map((i) => i.id));
     });
-    es.addEventListener('masterdata', () => {
-      void this.loadBootstrap().catch(() => {});
+    es.addEventListener('masterdata', (ev) => {
+      const msg = JSON.parse((ev as MessageEvent).data || '{}') as { reloadEntries?: boolean };
+      void this.loadBootstrap()
+        .then(() => msg.reloadEntries && this.reloadRanges())
+        .catch(() => {});
     });
     es.onerror = () => {
       this.live = false;

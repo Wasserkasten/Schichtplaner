@@ -132,3 +132,53 @@ describe('Backup', () => {
     expect(files).not.toContain('schichtplaner-20260102-000000.db');
   });
 });
+
+describe('Beispieldaten', () => {
+  const count = (table: string) => (db.prepare(`SELECT COUNT(*) n FROM ${table}`).get() as { n: number }).n;
+
+  it('lassen sich einfügen und vollständig entfernen, echte Daten bleiben erhalten', async () => {
+    const before = { departments: count('departments'), teams: count('teams'), employees: count('employees'), users: count('users') };
+    db.prepare("INSERT INTO entries(employee_id, date, type_id, created_by) VALUES (?, '2026-11-10', ?, ?)").run(ids.eA, ids.typeF, ids.admin);
+    const admin = await login('admin');
+
+    expect((await app.inject({ method: 'POST', url: '/api/admin/demo', headers: { cookie: await login('anna') } })).statusCode).toBe(403);
+
+    const res = await app.inject({ method: 'POST', url: '/api/admin/demo', headers: { cookie: admin } });
+    expect(res.statusCode).toBe(200);
+    const s = res.json();
+    expect(s).toMatchObject({ present: true, departments: 3, teams: 6, employees: 20 });
+    expect(s.users.map((u: { username: string }) => u.username)).toEqual(['demo.mitarbeiter', 'demo.teamleitung', 'demo.leser']);
+    expect(s.entries).toBeGreaterThan(500);
+    // gleichnamige Teams in verschiedenen Abteilungen
+    expect(count("teams WHERE name = 'Meisterei 1'")).toBe(2);
+    // ein zweites Mal geht nicht
+    expect((await app.inject({ method: 'POST', url: '/api/admin/demo', headers: { cookie: admin } })).statusCode).toBe(409);
+
+    // Beispiel-Teamleitung kann sich anmelden und arbeitet im Plan (erzeugt Protokolleintrag)
+    const loginRes = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'demo.teamleitung', password: 'demo1234' } });
+    expect(loginRes.statusCode).toBe(200);
+    const leadCookie = `sp_session=${loginRes.cookies.find((c) => c.name === 'sp_session')!.value}`;
+    const demoEmp = (db.prepare("SELECT e.id FROM employees e JOIN teams t ON t.id = e.team_id JOIN departments d ON d.id = t.department_id WHERE d.name = 'Beispiel Nord' AND t.name = 'Meisterei 1' LIMIT 1").get() as { id: number }).id;
+    expect((await app.inject({ method: 'POST', url: '/api/entries', headers: { cookie: leadCookie }, payload: { employeeId: demoEmp, date: '2026-11-20', text: 'Test' } })).statusCode).toBe(200);
+    const auditBefore = count('audit_log');
+
+    const del = await app.inject({ method: 'DELETE', url: '/api/admin/demo', headers: { cookie: admin } });
+    expect(del.statusCode).toBe(200);
+    expect({ departments: count('departments'), teams: count('teams'), employees: count('employees'), users: count('users') }).toEqual(before);
+    expect(count(`entries WHERE employee_id = ${ids.eA}`)).toBe(1); // echter Eintrag noch da
+    expect(count('audit_log')).toBe(auditBefore + 1); // Protokoll bleibt, plus Eintrag "entfernt"
+    expect((await app.inject({ method: 'GET', url: '/api/admin/demo', headers: { cookie: admin } })).json().present).toBe(false);
+    expect((await app.inject({ method: 'DELETE', url: '/api/admin/demo', headers: { cookie: admin } })).statusCode).toBe(409);
+  });
+
+  it('werden nicht entfernt, wenn ein echter Mitarbeiter in ein Beispiel-Team verschoben wurde', async () => {
+    const admin = await login('admin');
+    await app.inject({ method: 'POST', url: '/api/admin/demo', headers: { cookie: admin } });
+    const demoTeam = (db.prepare("SELECT t.id FROM teams t JOIN departments d ON d.id = t.department_id WHERE d.name = 'Beispiel Süd' LIMIT 1").get() as { id: number }).id;
+    db.prepare('UPDATE employees SET team_id = ? WHERE id = ?').run(demoTeam, ids.eA);
+    const res = await app.inject({ method: 'DELETE', url: '/api/admin/demo', headers: { cookie: admin } });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toContain('Anna A');
+    expect(count('employees')).toBe(22); // nichts gelöscht
+  });
+});

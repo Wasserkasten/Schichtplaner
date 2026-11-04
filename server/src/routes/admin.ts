@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { HttpError, requireAdmin, requireUser, type AppContext } from '../app.js';
 import { audit, getSetting, setSetting } from '../db.js';
 import { hashPassword } from '../auth.js';
+import { DemoError, demoSummary, insertDemoData, removeDemoData } from '../demo.js';
 
 const idParam = z.object({ id: z.coerce.number().int() });
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/);
@@ -275,6 +276,34 @@ export async function adminRoutes(app: FastifyInstance, { db, hub }: AppContext)
       writeGrants(id, b.grants);
       return { id, before, after: { ...b, password: b.password ? '***' : undefined } };
     });
+  });
+
+  // ---------- Beispieldaten ----------
+  app.get('/api/admin/demo', async (req) => {
+    requireAdmin(req);
+    return demoSummary(db);
+  });
+  const demoAction = (userId: number, action: 'create' | 'delete', fn: () => unknown) => {
+    let result: unknown;
+    try {
+      result = fn();
+    } catch (e) {
+      if (e instanceof DemoError) throw new HttpError(409, e.message);
+      throw e;
+    }
+    audit(db, { userId, action, entity: 'demo_data', entityId: null, after: action === 'create' ? result : undefined, before: action === 'delete' ? result : undefined });
+    hub.invalidate();
+    // offene Pläne laden Stammdaten und Einträge neu
+    hub.broadcast('masterdata', () => ({ entity: 'demo_data', reloadEntries: true }));
+    return result;
+  };
+  app.post('/api/admin/demo', async (req) => {
+    const { user } = requireAdmin(req);
+    return demoAction(user.id, 'create', () => insertDemoData(db));
+  });
+  app.delete('/api/admin/demo', async (req) => {
+    const { user } = requireAdmin(req);
+    return demoAction(user.id, 'delete', () => removeDemoData(db));
   });
 
   // ---------- Einstellungen ----------

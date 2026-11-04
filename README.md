@@ -18,6 +18,7 @@ Konzept, Rechtemodell und Fahrplan: **[docs/KONZEPT.md](docs/KONZEPT.md)** · In
 - **Änderungsprotokoll** mit Verlauf pro Zelle.
 - **Mehrbenutzer**: Live-Updates (Server-Sent Events) und Konflikterkennung.
 - **PWA**: auf Handy und PC installierbar, responsives Layout.
+- **Beispieldaten** per Klick einfügen und wieder entfernen (*Verwaltung → Einstellungen*).
 
 ## Installation
 
@@ -37,7 +38,7 @@ schon belegt: `APP_BIND=127.0.0.1:3001` in `.env`.
 
 ```bash
 npm ci
-npm run seed              # optional: Demodaten, Logins admin / anna / ben, Passwort "demo1234"
+npm run seed              # optional: Beispieldaten, Logins admin / demo.mitarbeiter / demo.teamleitung / demo.leser, Passwort "demo1234"
 npm run dev               # → http://localhost:5173
 ```
 

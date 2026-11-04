@@ -6,6 +6,8 @@
  *   node server/dist/cli.js reset-password <benutzer> [neues-passwort]
  *   node server/dist/cli.js create-admin <benutzer> [passwort]
  *   node server/dist/cli.js list-users
+ *   node server/dist/cli.js demo              Beispieldaten einfügen
+ *   node server/dist/cli.js demo-remove       Beispieldaten wieder entfernen
  *
  * Die Datenbank wird über DB_FILE gefunden (wie beim Server).
  */
@@ -18,6 +20,7 @@ import { openDb } from './db.js';
 import { hashPassword } from './auth.js';
 import { backupTo } from './backup.js';
 import { ensureEntryTypes } from './seed-lib.js';
+import { DEMO_PASSWORD, DemoError, insertDemoData, removeDemoData, type DemoSummary } from './demo.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const dbFile = process.env.DB_FILE ?? join(here, '..', 'data', 'schichtplaner.db');
@@ -30,6 +33,8 @@ function usage(): never {
   reset-password <benutzer> [passwort]  Passwort zurücksetzen (ohne Angabe: zufällig)
   create-admin <benutzer> [passwort]    zusätzlichen Administrator anlegen
   list-users                            Benutzer auflisten
+  demo                                  Beispieldaten einfügen (zusätzlich zu vorhandenen Daten)
+  demo-remove                           Beispieldaten wieder vollständig entfernen
 
 Datenbank: ${dbFile}  (änderbar über DB_FILE)`);
   process.exit(cmd ? 1 : 0);
@@ -104,7 +109,29 @@ switch (cmd) {
     for (const u of rows) console.log(`${u.username.padEnd(20)} ${u.display_name.padEnd(30)} ${u.is_admin ? 'Admin' : ''}${u.active ? '' : ' (inaktiv)'}`);
     break;
   }
+  case 'demo':
+  case 'demo-remove': {
+    try {
+      if (cmd === 'demo') {
+        printDemo('Beispieldaten eingefügt', insertDemoData(db));
+        console.log(`\nAnmeldung mit diesen Benutzern, Passwort jeweils "${DEMO_PASSWORD}".`);
+        console.log('Läuft der Server gerade, aktualisieren sich offene Pläne nach einem Neuladen der Seite.');
+      } else {
+        printDemo('Beispieldaten entfernt', removeDemoData(db).removed);
+      }
+    } catch (e) {
+      if (!(e instanceof DemoError)) throw e;
+      console.error(e.message);
+      process.exit(1);
+    }
+    break;
+  }
   default:
     usage();
 }
 db.close();
+
+function printDemo(title: string, s: DemoSummary) {
+  console.log(`${title}: ${s.departments} Abteilungen, ${s.teams} Teams, ${s.employees} Mitarbeiter, ${s.entries} Planeinträge`);
+  for (const u of s.users) console.log(`  ${u.username.padEnd(18)} ${u.role}`);
+}

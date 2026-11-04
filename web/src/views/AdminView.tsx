@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { del, get, post, put } from '../api';
+import { api, del, get, post, put } from '../api';
 import { store, useStore } from '../store';
 import { departmentName, fullName, reportError, sortedTeams, teamLabel, teamsByDepartment } from '../helpers';
 import type { Employee, EntryType, Level } from '../types';
@@ -32,7 +32,12 @@ export function AdminView() {
       {tab === 'structure' && <Structure />}
       {tab === 'users' && <Users />}
       {tab === 'types' && <Types />}
-      {tab === 'settings' && <Settings />}
+      {tab === 'settings' && (
+        <>
+          <Settings />
+          <DemoData />
+        </>
+      )}
       {tab === 'audit' && <Audit />}
     </div>
   );
@@ -364,6 +369,66 @@ function Settings() {
         </select>
       </label>
       <button className="primary" onClick={() => void run(async () => { await put('/api/admin/settings', s); store.holidays.clear(); })}>Speichern</button>
+    </div>
+  );
+}
+
+// ---------------- Beispieldaten ----------------
+interface DemoSummary {
+  present: boolean;
+  createdAt?: string;
+  departments: number;
+  teams: number;
+  employees: number;
+  entries: number;
+  users: { username: string; displayName: string; role: string }[];
+}
+function DemoData() {
+  const [s, setS] = useState<DemoSummary | null>(null);
+  const [busy, setBusy] = useState(false);
+  const load = () => get<DemoSummary>('/api/admin/demo').then(setS, reportError);
+  useEffect(() => void load(), []);
+  async function act(method: 'POST' | 'DELETE') {
+    const q =
+      method === 'POST'
+        ? 'Beispieldaten einfügen? Es werden 3 Abteilungen, 6 Teams, 20 Mitarbeiter, Planeinträge für drei Monate und 3 Beispielkonten angelegt. Vorhandene Daten bleiben unverändert.'
+        : 'Beispieldaten entfernen? Alle Beispiel-Abteilungen, -Teams, -Mitarbeiter, ihre Planeinträge und die Beispielkonten werden gelöscht. Deine eigenen Daten bleiben erhalten.';
+    if (!confirm(q)) return;
+    setBusy(true);
+    const ok = await run(() => api(method, '/api/admin/demo'), method === 'POST' ? 'Beispieldaten eingefügt' : 'Beispieldaten entfernt');
+    setBusy(false);
+    if (ok) void load();
+  }
+  if (!s) return null;
+  return (
+    <div className="card narrow demo">
+      <h3>Beispieldaten</h3>
+      {s.present ? (
+        <>
+          <p>
+            Vorhanden seit {s.createdAt ? new Date(s.createdAt).toLocaleString('de-DE') : '–'}: {s.departments} Abteilungen, {s.teams} Teams,{' '}
+            {s.employees} Mitarbeiter, {s.entries} Planeinträge.
+          </p>
+          <p className="small">Beispielkonten (Passwort jeweils <code>demo1234</code>):</p>
+          <ul className="small">
+            {s.users.map((u) => (
+              <li key={u.username}>
+                <code>{u.username}</code> – {u.role}
+              </li>
+            ))}
+          </ul>
+          <button className="danger" disabled={busy} onClick={() => void act('DELETE')}>Beispieldaten entfernen</button>
+        </>
+      ) : (
+        <>
+          <p className="small">
+            Zum Ausprobieren: legt Abteilungen, Teams (auch gleichnamige wie „Meisterei 1“ in zwei Abteilungen), 20 Mitarbeiter mit
+            Diensten, Urlaub, Krankheit und Notizen für den vorigen bis nächsten Monat sowie drei Beispielkonten mit unterschiedlichen
+            Rechten an. Alles ist mit „Beispiel“ gekennzeichnet und lässt sich hier mit einem Klick wieder vollständig entfernen.
+          </p>
+          <button className="primary" disabled={busy} onClick={() => void act('POST')}>Beispieldaten einfügen</button>
+        </>
+      )}
     </div>
   );
 }

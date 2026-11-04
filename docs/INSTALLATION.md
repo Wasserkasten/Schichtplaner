@@ -188,6 +188,9 @@ Ohne `ADMIN_PASSWORD` erzeugt die App ein zufälliges Passwort und schreibt es i
 
 Alles Folgende geschieht im Browser unter **Verwaltung** (nur für Administratoren sichtbar). Empfohlene Reihenfolge:
 
+> **Erst einmal nur ausprobieren?** Mit [Beispieldaten](#38-beispieldaten-zum-ausprobieren) ist der Plan in einem Klick gefüllt
+> und lässt sich danach genauso schnell wieder leeren.
+
 ### 3.1 Einstellungen
 
 *Verwaltung → Einstellungen*
@@ -254,6 +257,36 @@ festlegen; sie öffnet sich nach der Anmeldung. Administratoren können Ansichte
 - **Android (Chrome):** Seite öffnen → Menü ⋮ → *App installieren* bzw. *Zum Startbildschirm hinzufügen*
 - **iPhone/iPad (Safari):** Teilen-Symbol → *Zum Home-Bildschirm*
 - **Windows/macOS (Chrome/Edge):** Installieren-Symbol rechts in der Adressleiste
+
+### 3.8 Beispieldaten zum Ausprobieren
+
+*Verwaltung → Einstellungen → Beispieldaten → **Beispieldaten einfügen***
+
+Angelegt werden **zusätzlich** zu vorhandenen Daten:
+
+| Was | Inhalt |
+|---|---|
+| Abteilungen und Teams | *Beispiel Nord* und *Beispiel Süd* mit je *Meisterei 1* und *Meisterei 2* (gleichnamige Teams in zwei Abteilungen), *Beispiel Verwaltung* mit *Disposition* und *Werkstatt* |
+| Mitarbeiter | 20, mit Planeinträgen vom vorigen bis zum nächsten Monat: Schichtrhythmus F-F-S-S-N-N-frei-frei, Tagdienst, Homeoffice, Bereitschaft, Urlaub, Krankheit, Fortbildung, Notizen |
+| Beispielkonten (Passwort jeweils `demo1234`) | `demo.mitarbeiter`: darf das eigene Team bearbeiten<br>`demo.teamleitung`: verwaltet das eigene Team und bearbeitet ein Nachbarteam<br>`demo.leser`: nur ansehen, kein eigenes Team – sieht Krankmeldungen nur als „abwesend“ |
+
+Mit den Beispielkonten lässt sich gut ausprobieren, wie die Rechte wirken: zwei Browser (oder ein privates Fenster) öffnen und mit
+unterschiedlichen Konten anmelden. Änderungen erscheinen im jeweils anderen Fenster sofort.
+
+**Entfernen:** an derselben Stelle **Beispieldaten entfernen**. Gelöscht werden genau die Beispiel-Abteilungen, -Teams, -Mitarbeiter,
+ihre Planeinträge und die Beispielkonten; eigene Daten bleiben unverändert. Hast du einen eigenen Mitarbeiter in ein Beispiel-Team
+(oder ein eigenes Team in eine Beispiel-Abteilung) verschoben, bricht das Entfernen mit einem Hinweis ab, statt ihn mitzulöschen.
+
+Dasselbe geht über die Kommandozeile:
+
+```bash
+docker compose exec app node server/dist/cli.js demo           # einfügen
+docker compose exec app node server/dist/cli.js demo-remove    # entfernen
+```
+
+Nach dem Einfügen per Kommandozeile die Seite im Browser einmal neu laden.
+
+> Für den echten Betrieb die Beispielkonten nicht stehen lassen: Ihr Passwort ist öffentlich bekannt.
 
 ---
 
@@ -683,7 +716,7 @@ Voraussetzung: [Node.js 22](https://nodejs.org/) (Windows, macOS oder Linux) und
 git clone https://github.com/wasserkasten/schichtplaner.git
 cd schichtplaner
 npm ci
-npm run seed      # optional: Demodaten, Logins admin / anna / ben, Passwort "demo1234"
+npm run seed      # optional: leere Datenbank mit Beispieldaten füllen, Logins admin, demo.mitarbeiter, demo.teamleitung, demo.leser – Passwort "demo1234"
 npm run dev       # startet API (Port 3000) und Oberfläche (Port 5173)
 ```
 
@@ -695,7 +728,7 @@ Dann <http://localhost:5173> öffnen. Änderungen am Code werden sofort übernom
 | Befehl | Zweck |
 |---|---|
 | `npm run dev` | Entwicklungsmodus mit automatischem Neuladen |
-| `npm run seed` | Demodaten in eine **leere** Datenbank schreiben |
+| `npm run seed` | **leere** Datenbank mit Administrator und Beispieldaten füllen (sonst: [3.8](#38-beispieldaten-zum-ausprobieren)) |
 | `npm test` | automatische Tests |
 | `npm run typecheck` | TypeScript-Prüfung |
 | `npm run build` + `npm start` | Produktionsbuild lokal starten → <http://localhost:3000> |
@@ -760,6 +793,8 @@ Aufruf: Docker `docker compose exec app node server/dist/cli.js <befehl>`, ohne 
 | `list-users` | alle Benutzer anzeigen |
 | `reset-password <benutzer> [passwort]` | Passwort setzen, Benutzer aktivieren, alle Sitzungen beenden |
 | `create-admin <benutzer> [passwort]` | zusätzlichen Administrator anlegen |
+| `demo` | [Beispieldaten](#38-beispieldaten-zum-ausprobieren) einfügen |
+| `demo-remove` | Beispieldaten wieder vollständig entfernen |
 
 ### 9.5 Netzwerk
 
@@ -807,4 +842,5 @@ Health-Check für Monitoring (z. B. Uptime Kuma): `https://plan.example.de/api/h
 - [ ] Automatische Sicherheitsupdates des Servers (`sudo apt install unattended-upgrades`)
 - [ ] Backups werden regelmäßig **vom Server weg** kopiert, und eine Wiederherstellung wurde einmal ausprobiert
 - [ ] Ausgeschiedene Mitarbeiter: Benutzer auf *inaktiv*, Mitarbeiter auf *inaktiv*
+- [ ] Beispieldaten entfernt (*Verwaltung → Einstellungen*), damit keine Konten mit bekanntem Passwort bestehen
 - [ ] Freigabe von Arbeitgeber, Betriebsrat und Datenschutz liegt vor ([Konzept, Kapitel 7](KONZEPT.md#7-wichtig-vor-einem-echten-einsatz))
