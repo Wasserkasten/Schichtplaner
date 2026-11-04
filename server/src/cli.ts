@@ -4,6 +4,7 @@
  *   node server/dist/cli.js backup <zieldatei>
  *   node server/dist/cli.js restore <sicherung>     (nur bei gestopptem Server!)
  *   node server/dist/cli.js reset-password <benutzer> [neues-passwort]
+ *   node server/dist/cli.js password-link <benutzer>   Link zum Zurücksetzen (PUBLIC_URL = Adresse der App)
  *   node server/dist/cli.js create-admin <benutzer> [passwort]
  *   node server/dist/cli.js list-users
  *   node server/dist/cli.js demo              Beispieldaten einfügen
@@ -20,6 +21,7 @@ import { openDb } from './db.js';
 import { hashPassword } from './auth.js';
 import { backupTo } from './backup.js';
 import { ensureEntryTypes } from './seed-lib.js';
+import { LINK_DAYS, SECRET_LABEL, createPasswordLink } from './password-links.js';
 import { DEMO_PASSWORD, DemoError, insertDemoData, removeDemoData, type DemoSummary } from './demo.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -31,6 +33,7 @@ function usage(): never {
   backup <zieldatei>                    Sicherung der Datenbank anlegen
   restore <sicherung>                   Sicherung zurückspielen (Server vorher stoppen!)
   reset-password <benutzer> [passwort]  Passwort zurücksetzen (ohne Angabe: zufällig)
+  password-link <benutzer>              Link erzeugen, über den der Benutzer sein Passwort selbst festlegt
   create-admin <benutzer> [passwort]    zusätzlichen Administrator anlegen
   list-users                            Benutzer auflisten
   demo                                  Beispieldaten einfügen (zusätzlich zu vorhandenen Daten)
@@ -87,6 +90,19 @@ switch (cmd) {
     }
     db.prepare('DELETE FROM sessions WHERE user_id = (SELECT id FROM users WHERE username = ?)').run(a);
     console.log(`Neues Passwort für "${a}": ${pw}\n(muss bei der nächsten Anmeldung geändert werden)`);
+    break;
+  }
+  case 'password-link': {
+    if (!a) usage();
+    const u = db.prepare('SELECT id FROM users WHERE username = ?').get(a) as { id: number } | undefined;
+    if (!u) {
+      console.error(`Benutzer "${a}" nicht gefunden.`);
+      process.exit(1);
+    }
+    const link = createPasswordLink(db, u.id, 'reset', null);
+    const base = (process.env.PUBLIC_URL ?? 'https://<adresse-der-app>').replace(/\/$/, '');
+    console.log(`Link für "${a}" (${LINK_DAYS} Tage gültig, einmal nutzbar):\n  ${base}/#/passwort/${link.token}`);
+    console.log(link.secretKind ? `Beim Öffnen wird abgefragt: ${SECRET_LABEL[link.secretKind]}` : 'Kein Prüfmerkmal hinterlegt (weder Personalnummer noch Kürzel) – Link nur persönlich weitergeben!');
     break;
   }
   case 'create-admin': {

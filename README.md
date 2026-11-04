@@ -17,6 +17,8 @@ Konzept, Rechtemodell und Fahrplan: **[docs/KONZEPT.md](docs/KONZEPT.md)** · In
 - **Gespeicherte Ansichten** und persönliche Standardansicht.
 - **Eintragsarten** frei konfigurierbar (Kürzel, Farbe, Zeiten, „zählt als Urlaub“, „vertraulich“) plus Freitext.
 - **Rechte**: ansehen / bearbeiten / verwalten – je Team, Abteilung oder global; eigenes Team automatisch.
+- **Konten einfach anlegen**: Mitarbeiter und Konto in einem Schritt; Passwort legt jeder selbst über einen
+  persönlichen Link fest (QR-Code, druckbares Zugangsschreiben, Bestätigung per Personalnummer/Kürzel).
 - **Rückgängig** über Meldungen nach jeder Änderung (auch mehrere, Strg+Z), sicher bei gleichzeitiger Bearbeitung.
 - **Änderungsprotokoll** in Klartext mit Verlauf pro Zelle.
 - **Jahresübersicht drucken und als PDF** (einzeln oder ganzes Team).

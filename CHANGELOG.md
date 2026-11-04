@@ -22,8 +22,12 @@ So wird dieser Changelog in der App verwendet (je Version):
 - **Schrift zu klein?** Oben rechts auf deinen Namen klicken und mit **A−** / **A+** einstellen. Das gilt für dein Konto auf allen Geräten.
 - **Jahresübersicht drucken oder als PDF speichern:** im Jahreskalender über **Drucken** bzw. **PDF**.
 - **Feiertage und arbeitsfreie Tage** wie Heiligabend oder Rosenmontag sind im Plan farbig markiert.
+- **Passwort vergessen?** Auf der Anmeldeseite steht, an wen du dich wenden kannst. Du bekommst dann einen persönlichen Link und legst dein neues Passwort selbst fest.
 
 ### Neu
+- **Mitarbeiter und Konto in einem Schritt:** beim Anlegen eines Mitarbeiters gleich das Benutzerkonto (und umgekehrt); Spalte „Konto“ in der Mitarbeiterliste mit „+ Konto“.
+- **Einrichtungslink statt Startpasswort:** Link mit QR-Code bzw. druckbares Zugangsschreiben; Bestätigung über Personalnummer oder Kürzel, 7 Tage gültig, einmal nutzbar, Sperre nach 5 Fehlversuchen. Ebenso „Link zum Zurücksetzen“ und `cli.js password-link`. Zufallspasswort-Generator für die manuelle Vergabe.
+- **Ansprechpartner bei Anmeldeproblemen** einstellbar; erscheint auf der Anmeldeseite („Passwort vergessen?“), bei ungültigen Links und im Zugangsschreiben.
 - **Neuigkeiten für alle:** Nach einem Update erscheint allen Benutzern eine Hinweisleiste „Was ist neu?“ mit den Punkten aus *Für alle*; besonders wichtige Hinweise (*Wichtig*) erscheinen als Fenster mit „Verstanden“, Administratoren sehen unter *Verwaltung → Info*, wer schon bestätigt hat. Lese- und Bestätigungsstand werden am Benutzerkonto gespeichert; „Neuigkeiten“ im Benutzermenü zeigt sie erneut.
 - **Rückgängig:** Nach jeder eigenen Änderung erscheint unten links eine Meldung („U eingetragen · Becker, Anna · 11.–13.11.“) mit **Rückgängig**. Mehrere Meldungen können gleichzeitig offen sein; ältere Änderungen über **↶** in der Kopfzeile, die letzte auch mit **Strg+Z**. Zurückgenommenes lässt sich **wiederholen**. Hat jemand anderes den Eintrag inzwischen geändert, wird nichts überschrieben.
 - **Jahresübersicht drucken und als PDF:** im Jahreskalender **Drucken** (A4 quer) und **PDF** – für einen Mitarbeiter oder ein ganzes Team (eine Seite je Person).

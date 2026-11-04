@@ -65,6 +65,7 @@ h3 { font-size: 0.95rem; margin: 12px 0 6px; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 12px; }
 .narrow { max-width: 420px; }
 .card.demo { max-width: 620px; margin-top: 16px; }
+.support-settings { margin-top: 16px; }
 .card.demo ul { padding-left: 18px; }
 .hint { background: var(--accent-soft); padding: 8px; border-radius: 6px; }
 .error { color: var(--danger); }
@@ -293,3 +294,17 @@ a.button:hover { border-color: var(--accent); }
 .news-important { background: #fff4cc; color: #3d3200; border-left: 4px solid #e0a800; padding: 6px 12px; border-radius: 4px; margin-bottom: 8px; }
 details > summary.plain { border: 0; padding: 2px 0; color: var(--accent); }
 details > summary.plain::after { content: ''; }
+
+/* Einrichtungslink / Anmeldung */
+.link-box { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+.link-box .qr { background: #fff; padding: 4px; border-radius: 6px; line-height: 0; }
+.link-box .link-text { flex: 1; min-width: 260px; display: flex; flex-direction: column; gap: 8px; }
+.link-box input { width: 100%; font-family: ui-monospace, Consolas, monospace; font-size: 0.85rem; }
+.login .setpw { max-width: 420px; text-align: left; }
+.login .setpw img, .login .setpw h1 { align-self: center; text-align: center; }
+.support { text-align: left; background: var(--accent-soft); border-radius: 6px; padding: 8px 10px; }
+.pw-row { display: flex; gap: 6px; }
+.pw-row input { flex: 1; font-family: ui-monospace, Consolas, monospace; }
+.radio-list { display: flex; flex-direction: column; gap: 4px; }
+.radio-list label { flex-direction: row !important; align-items: flex-start; gap: 6px !important; color: var(--text) !important; }
+.sub-form { border-left: 3px solid var(--accent-soft); padding-left: 10px; }

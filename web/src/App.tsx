@@ -8,6 +8,7 @@ import { DayView } from './views/DayView';
 import { YearView } from './views/YearView';
 import { AdminView, type AdminTab } from './views/AdminView';
 import { LoginView } from './views/LoginView';
+import { SetPasswordView } from './views/SetPasswordView';
 import { TeamFilter } from './components/TeamFilter';
 import { ViewMenu } from './components/ViewMenu';
 import { PasswordDialog } from './components/PasswordDialog';
@@ -47,6 +48,7 @@ export function App() {
   const [nav, setNav] = useState<NavState>({ kind: 'month', date: today(), teamIds: [], employeeId: null, days: 0, ...fromHash() });
   const [views, setViews] = useState<SavedView[]>([]);
   const [pwOpen, setPwOpen] = useState(false);
+  const [linkToken, setLinkToken] = useState<string | null>(() => /^#\/passwort\/([\w-]{10,})/.exec(location.hash)?.[1] ?? null);
   const [adminTab, setAdminTab] = useState<AdminTab | undefined>(undefined);
   const [news, setNews] = useState<News | null>(null);
   const [newsOpen, setNewsOpen] = useState<'unseen' | 'recent' | null>(null);
@@ -72,7 +74,12 @@ export function App() {
 
   useEffect(() => {
     void init();
-    const onHash = () => setNav((n) => ({ ...n, ...fromHash() }));
+    const onHash = () => {
+      // Link zum Passwort in einen offenen Tab eingefügt
+      const t = /^#\/passwort\/([\w-]{10,})/.exec(location.hash)?.[1];
+      if (t) return setLinkToken(t);
+      setNav((n) => ({ ...n, ...fromHash() }));
+    };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -111,6 +118,19 @@ export function App() {
     setState('login');
   }
 
+  // Einrichtungs-/Zurücksetz-Link (#/passwort/<token>) – unabhängig davon, ob jemand angemeldet ist
+  if (linkToken) {
+    return (
+      <SetPasswordView
+        token={linkToken}
+        onDone={() => {
+          history.replaceState(null, '', '/'); // Token nicht im Verlauf lassen
+          setLinkToken(null);
+          void init();
+        }}
+      />
+    );
+  }
   if (state === 'loading') return <div className="center muted">Lade …</div>;
   if (state === 'login' || !st.boot) return <LoginView onLoggedIn={() => void init()} />;
 

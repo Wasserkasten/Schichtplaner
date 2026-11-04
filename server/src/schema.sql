@@ -141,3 +141,18 @@ CREATE TABLE IF NOT EXISTS holidays (
 CREATE TABLE IF NOT EXISTS holiday_years (
   year INTEGER PRIMARY KEY
 );
+
+-- Einrichtungs- und Zurücksetz-Links für Passwörter (Token nur als Hash gespeichert).
+-- secret_kind: welches bekannte Merkmal beim Öffnen abgefragt wird (Personalnummer oder Kürzel des verknüpften Mitarbeiters).
+CREATE TABLE IF NOT EXISTS password_tokens (
+  id          INTEGER PRIMARY KEY,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash  TEXT NOT NULL UNIQUE,
+  purpose     TEXT NOT NULL CHECK (purpose IN ('setup','reset')),
+  secret_kind TEXT CHECK (secret_kind IN ('personnel_no','short_name')),
+  created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  expires_at  TEXT NOT NULL,
+  used_at     TEXT,
+  attempts    INTEGER NOT NULL DEFAULT 0
+);

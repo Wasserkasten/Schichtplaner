@@ -200,6 +200,7 @@ Alles Folgende geschieht im Browser unter **Verwaltung** (nur für Administrator
 | Bundesland | Quelle für die gesetzlichen Feiertage (Anpassungen unter *Feiertage*, siehe [3.8](#38-feiertage-und-arbeitsfreie-tage)) | Bundesland des Betriebs – **vor** dem Anpassen der Feiertage einstellen |
 | Recht aller Benutzer auf alle Teams | Grundstufe für jeden angemeldeten Benutzer | **ansehen**: jeder sieht den Gesamtplan; „kein Zugriff“, wenn Teams sich nicht sehen sollen |
 | Recht auf das eigene Team | gilt automatisch für das Team des verknüpften Mitarbeiters | **bearbeiten**: entspricht „jeder Mitarbeiter kann im eigenen Team ändern“ |
+| Hilfe bei Anmeldeproblemen | Ansprechpartner (Name/Stelle, Telefon, E-Mail, Hinweis) für vergessene Passwörter und abgelaufene Links; erscheint öffentlich auf der Anmeldeseite und im Zugangsschreiben | z. B. Leitstelle mit Durchwahl – keine privaten Nummern |
 
 ### 3.2 Abteilungen und Teams
 
@@ -232,13 +233,32 @@ sie verschwinden aus dem Plan, ihre Historie bleibt erhalten.
 
 ### 3.5 Benutzer und Rechte
 
-*Verwaltung → Benutzer & Rechte → + Benutzer*
+Mitarbeiter und Benutzerkonten gehören normalerweise paarweise zusammen; beides lässt sich in einem Schritt anlegen:
 
-1. **Benutzername** (z. B. `vorname.nachname`), **Anzeigename**, **Startpasswort**
-2. **Verknüpfter Mitarbeiter**: daraus ergibt sich das „eigene Team“
-3. Optional **zusätzliche Berechtigungen** anlegen
+- *Verwaltung → Mitarbeiter → + Mitarbeiter*: Häkchen **„Benutzerkonto gleich mit anlegen“** (Benutzername wird als
+  `vorname.nachname` vorgeschlagen).
+- *Verwaltung → Mitarbeiter*: in der Spalte **Konto** bei Mitarbeitern ohne Konto **+ Konto** – ein Klick.
+- *Verwaltung → Benutzer & Rechte → + Benutzer*: **„neuen Mitarbeiter gleich mit anlegen“** oder einen vorhandenen verknüpfen.
+  Ohne verknüpften Mitarbeiter (z. B. Personalabteilung) gibt es kein „eigenes Team“.
 
-Die Startpasswörter gibst du persönlich weiter. Bei der ersten Anmeldung muss jeder ein eigenes Passwort vergeben.
+Konten mit Mitarbeiter-Verknüpfung können nur Administratoren anlegen; Teamverwalter legen nur Mitarbeiter an.
+
+**Passwort – empfohlen: Einrichtungslink.** Statt ein Passwort zu vergeben, erzeugt die App einen persönlichen Link:
+
+1. Nach dem Anlegen erscheint der Link mit **QR-Code**. Weitergeben per **Link kopieren** (Chat, Teams …) oder
+   **Zugangsschreiben drucken** (A4 mit Name, Benutzername, QR-Code, Anleitung und Ansprechpartner).
+2. Der Kollege öffnet den Link, bestätigt sich mit seiner **Personalnummer** (falls hinterlegt, sonst dem **Kürzel**)
+   und legt **selbst** ein Passwort fest – danach ist er angemeldet. Du erfährst das Passwort nie.
+3. Der Link gilt **7 Tage**, ist **einmal** verwendbar und nach **5** falschen Eingaben gesperrt. In der Benutzerliste
+   steht so lange „Einrichtung offen“.
+
+Ohne Personalnummer und Kürzel gibt es keine Rückfrage – dann den Link nur persönlich übergeben. Alternativ lässt sich
+ein **Startpasswort** festlegen (Knopf **🎲 Zufällig** erzeugt ein gut lesbares), das bei der ersten Anmeldung geändert
+werden muss.
+
+**Passwort vergessen:** *Benutzer bearbeiten → 🔗 Link zum Zurücksetzen erstellen* – gleicher Ablauf, ein älterer Link
+wird ungültig. Wen Kollegen dafür ansprechen sollen, steht auf der Anmeldeseite unter „Passwort vergessen?“
+(einstellbar unter *Einstellungen → Hilfe bei Anmeldeproblemen*).
 
 Typische Konfigurationen:
 
@@ -456,11 +476,12 @@ Eine Sicherung vom eigenen PC zurückspielen: erst mit `docker compose cp ./date
 
 ### 4.4 Passwort vergessen / ausgesperrt
 
-Ein Administrator setzt Passwörter normalerweise in der App zurück (*Benutzer bearbeiten → Neues Passwort*).
+Ein Administrator setzt Passwörter normalerweise in der App zurück (*Benutzer bearbeiten → Link zum Zurücksetzen*, siehe [3.5](#35-benutzer-und-rechte)).
 Ist kein Administrator mehr erreichbar, geht es über die Kommandozeile auf dem Server:
 
 ```bash
 docker compose exec app node server/dist/cli.js list-users
+docker compose exec -e PUBLIC_URL=https://plan.example.de app node server/dist/cli.js password-link admin   # Link zum Selbst-Festlegen
 docker compose exec app node server/dist/cli.js reset-password admin             # zufälliges Passwort
 docker compose exec app node server/dist/cli.js reset-password admin NeuesPw123  # festes Passwort
 docker compose exec app node server/dist/cli.js create-admin notfall-admin       # zusätzlichen Admin anlegen
@@ -881,6 +902,7 @@ Aufruf: Docker `docker compose exec app node server/dist/cli.js <befehl>`, ohne 
 | `list-users` | alle Benutzer anzeigen |
 | `reset-password <benutzer> [passwort]` | Passwort setzen, Benutzer aktivieren, alle Sitzungen beenden |
 | `create-admin <benutzer> [passwort]` | zusätzlichen Administrator anlegen |
+| `password-link <benutzer>` | Link erzeugen, über den der Benutzer sein Passwort selbst festlegt (`PUBLIC_URL` = Adresse der App) |
 | `demo` | [Beispieldaten](#39-beispieldaten-zum-ausprobieren) einfügen |
 | `demo-remove` | Beispieldaten wieder vollständig entfernen |
 

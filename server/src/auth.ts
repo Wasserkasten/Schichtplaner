@@ -55,9 +55,9 @@ export function deleteSession(db: DB, token: string): void {
 
 /** Sehr einfache Bremse gegen Passwort-Raten (pro Benutzername + IP). */
 const failed = new Map<string, { count: number; until: number }>();
-export function loginBlocked(key: string): boolean {
+export function loginBlocked(key: string, max = 5): boolean {
   const f = failed.get(key);
-  return !!f && f.count >= 5 && f.until > Date.now();
+  return !!f && f.count >= max && f.until > Date.now();
 }
 export function loginFailed(key: string): void {
   const f = failed.get(key) ?? { count: 0, until: 0 };

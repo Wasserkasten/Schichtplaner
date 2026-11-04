@@ -488,3 +488,77 @@ describe('Neuigkeiten', () => {
     expect(db.prepare("SELECT seen_version, ack_version FROM users WHERE username = 'neu'").get()).toEqual({ seen_version: APP_VERSION, ack_version: APP_VERSION });
   });
 });
+
+describe('Konten anlegen und Einrichtungslinks', () => {
+  const info = (token: string) => app.inject({ method: 'POST', url: '/api/password-link/info', payload: { token } });
+  const use = (token: string, secret: string, password = 'NeuesPasswort1') => app.inject({ method: 'POST', url: '/api/password-link/use', payload: { token, secret, password } });
+  const loginWith = (username: string, password: string) => app.inject({ method: 'POST', url: '/api/auth/login', payload: { username, password } });
+
+  it('Mitarbeiter mit Konto anlegen; Link mit Personalnummer einlösen; danach angemeldet', async () => {
+    const admin = await login('admin');
+    const res = await app.inject({
+      method: 'POST', url: '/api/admin/employees', headers: { cookie: admin },
+      payload: { teamId: ids.tA, firstName: 'Carla', lastName: 'Cramer', personnelNo: '4711', account: { username: 'carla.cramer' } },
+    });
+    expect(res.statusCode).toBe(200);
+    const { account, id: empId } = res.json();
+    expect(account).toMatchObject({ username: 'carla.cramer', link: { secretKind: 'personnel_no', purpose: 'setup' } });
+    expect(db.prepare('SELECT employee_id, display_name FROM users WHERE username = ?').get('carla.cramer')).toEqual({ employee_id: empId, display_name: 'Carla Cramer' });
+
+    const token = account.link.token;
+    expect((await info(token)).json()).toMatchObject({ username: 'carla.cramer', secretLabel: 'Personalnummer', purpose: 'setup' });
+    const wrong = await use(token, '1234');
+    expect(wrong.statusCode).toBe(403);
+    expect(wrong.json().error).toContain('Noch 4 Versuche');
+    const ok = await use(token, ' 4711 ');
+    expect(ok.statusCode).toBe(200);
+    expect(ok.cookies.some((c) => c.name === 'sp_session')).toBe(true); // gleich angemeldet
+    expect((await loginWith('carla.cramer', 'NeuesPasswort1')).statusCode).toBe(200);
+    expect((await use(token, '4711')).statusCode).toBe(410); // nur einmal nutzbar
+  });
+
+  it('Sperre nach 5 Fehlversuchen, Ablauf, neuer Link macht alten ungültig', async () => {
+    const admin = await login('admin');
+    db.prepare("UPDATE employees SET short_name = 'AAN' WHERE id = ?").run(ids.eA);
+    const mk = async () => (await app.inject({ method: 'POST', url: `/api/admin/users/${ids.anna}/password-link`, headers: { cookie: admin }, payload: {} })).json();
+    const l1 = await mk();
+    expect(l1.link.secretKind).toBe('short_name');
+    for (let i = 0; i < 5; i++) await use(l1.link.token, 'falsch');
+    expect((await use(l1.link.token, 'aan')).statusCode).toBe(423); // gesperrt
+    const l2 = await mk();
+    const l3 = await mk();
+    expect((await info(l2.link.token)).statusCode).toBe(404); // durch l3 ersetzt
+    db.prepare("UPDATE password_tokens SET expires_at = '2000-01-01T00:00:00Z'").run();
+    expect((await info(l3.link.token)).statusCode).toBe(410);
+  });
+
+  it('Benutzer mit neuem Mitarbeiter anlegen; ohne Passwort gibt es einen Link', async () => {
+    const admin = await login('admin');
+    const res = (await app.inject({
+      method: 'POST', url: '/api/admin/users', headers: { cookie: admin },
+      payload: { username: 'dora', displayName: 'Dora D', grants: [], newEmployee: { teamId: ids.tB, firstName: 'Dora', lastName: 'D', shortName: 'DOD' } },
+    })).json();
+    expect(res.link).toMatchObject({ secretKind: 'short_name' });
+    expect(db.prepare('SELECT team_id FROM employees WHERE id = ?').get(res.employeeId)).toEqual({ team_id: ids.tB });
+    const list = (await app.inject({ method: 'GET', url: '/api/admin/users', headers: { cookie: admin } })).json();
+    expect(list.find((u: { username: string }) => u.username === 'dora').pendingLink).toMatchObject({ purpose: 'setup' });
+    // Benutzername schon vergeben
+    const dup = await app.inject({ method: 'POST', url: '/api/admin/users', headers: { cookie: admin }, payload: { username: 'dora', displayName: 'X', grants: [] } });
+    expect(dup.statusCode).toBe(409);
+  });
+
+  it('Teamverwalter dürfen Mitarbeiter, aber keine Konten anlegen', async () => {
+    db.prepare("INSERT INTO grants(user_id, scope, scope_id, level) VALUES (?, 'team', ?, 'manage')").run(ids.anna, ids.tA);
+    const anna = await login('anna');
+    const base = { teamId: ids.tA, firstName: 'E', lastName: 'E' };
+    expect((await app.inject({ method: 'POST', url: '/api/admin/employees', headers: { cookie: anna }, payload: base })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'POST', url: '/api/admin/employees', headers: { cookie: anna }, payload: { ...base, account: { username: 'e.e' } } })).statusCode).toBe(403);
+  });
+
+  it('Ansprechpartner erscheint öffentlich auf der Anmeldeseite', async () => {
+    expect((await app.inject({ method: 'GET', url: '/api/public/login-info' })).json()).toEqual({ contact: null });
+    const admin = await login('admin');
+    await app.inject({ method: 'PUT', url: '/api/admin/support-contact', headers: { cookie: admin }, payload: { name: 'Leitstelle, Herr Meier', phone: '0221 123-45' } });
+    expect((await app.inject({ method: 'GET', url: '/api/public/login-info' })).json().contact).toMatchObject({ name: 'Leitstelle, Herr Meier', phone: '0221 123-45', email: '' });
+  });
+});
