@@ -10,6 +10,7 @@ export interface UserRow {
   is_admin: number;
   active: number;
   must_change_password: number;
+  font_scale: number;
 }
 
 const SESSION_DAYS = 30;

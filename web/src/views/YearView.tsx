@@ -5,7 +5,7 @@ import { MONTHS, WEEKDAYS, daysInMonth, isWeekend, iso, today, weekday } from '.
 import { fullName, reportError, sortedTeams, teamLabel, typeMap } from '../helpers';
 import { EntryChip } from '../components/EntryChip';
 import { CellEditor } from '../components/CellEditor';
-import { dayClass, holidayTitle } from './MonthView';
+import { CellContent, dayClass, holidayTitle } from './MonthView';
 
 /** Jahreskalender pro Mitarbeiter: 12 Zeilen (Monate) × 31 Spalten (Tage) plus Auswertung. */
 export function YearView({ nav, setNav }: { nav: NavState; setNav: (n: NavState) => void }) {
@@ -61,7 +61,11 @@ export function YearView({ nav, setNav }: { nav: NavState; setNav: (n: NavState)
       </div>
 
       <div className="grid-wrap">
-        <table className="plan yeargrid">
+        <table className="plan fixed yeargrid" style={{ minWidth: `${7 + 31 * 2.15}rem` }}>
+          <colgroup>
+            <col className="namecol" />
+            {Array.from({ length: 31 }, (_, i) => <col key={i} />)}
+          </colgroup>
           <thead>
             <tr>
               <th className="sticky-col">Monat</th>
@@ -78,7 +82,7 @@ export function YearView({ nav, setNav }: { nav: NavState; setNav: (n: NavState)
                   const h = st.holidayOn(date);
                   return (
                     <td key={i} className={`${dayClass(date, t, h)} cell editable`} title={`${WEEKDAYS[weekday(date)]}${h ? ' · ' + holidayTitle(h) : ''}`} onClick={() => setEditing(date)}>
-                      {st.cell(emp.id, date).map((e) => <EntryChip key={e.id} e={e} types={types} />)}
+                      <CellContent entries={st.cell(emp.id, date)} types={types} />
                     </td>
                   );
                 })}

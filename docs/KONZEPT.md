@@ -27,7 +27,7 @@ Eintragsart (Dienst | sonstige Anwesenheit | Abwesenheit)
 
 * **Mitarbeiter ≠ Benutzer.** Ein Mitarbeiter kann im Plan stehen, ohne ein Konto zu haben
   (z. B. während der Umstellung). Ein Konto kann ohne Mitarbeiter existieren (z. B. Personalabteilung).
-* **Mehrere Einträge pro Tag** sind erlaubt, z. B. „F“ + Notiz „Arzttermin 10 Uhr“.
+* **Mehrere Einträge pro Tag** sind erlaubt: bis zu **3 Dienste bzw. An-/Abwesenheiten** (z. B. IV-Dienst + Telefondienst, jede Art nur einmal) plus beliebige Notizen.
 * **Eintragsarten** (vorbelegt, frei änderbar):
   Dienste F/S/N/T/B · Anwesenheit Homeoffice, Dienstreise, Fortbildung ·
   Abwesenheit Urlaub, Freizeitausgleich, Sonderurlaub, Krank, Kind krank.
@@ -53,11 +53,14 @@ Die effektive Stufe je Team ist das **Maximum** aus:
 ## 4. Ansichten
 
 * **Kalender** (Hauptansicht wie bisher): links Mitarbeiter gruppiert nach Team, oben Tage mit KW,
-  Wochenenden/Feiertage/Heute hervorgehoben, Besetzungszahl je Team und Tag.
+  Wochenenden/Feiertage/Heute hervorgehoben, nutzt die volle Fensterbreite. Mehrere Dienste stehen nebeneinander in der Zelle,
+  Notizen daneben als Markierung in der Ecke.
   - *Auswahlmodus*: Klick auf Zelle öffnet Dialog (Einträge, Freitext, Uhrzeiten, Zeitraum „bis“, Verlauf).
   - *Pinsel*: Eintragsart wählen, dann Zellen anklicken oder ein Rechteck aufziehen – schnelles Planen
     ganzer Wochen/Teams. „Leeren“ entfernt Einträge.
-  - Zeitraum: Monat, 7/14 Tage, 4/6 Wochen.
+  - Pinsel-Modus „zusätzlich eintragen“ (oder Strg-Klick) für weitere Dienste am selben Tag.
+  - Zeitraum: Monat, 7/14 Tage, 4/6 Wochen oder „Fensterbreite“ (so viele Tage, wie passen).
+* **Schriftgröße** je Benutzer einstellbar (90–175 %), gilt auf allen Geräten.
 * **Tag**: Wer hat welchen Dienst (nach Dienstart, mit Zeiten)? Wer ist sonst anwesend? Wer fehlt?
   Notizen, Mitarbeiter ohne Eintrag. Ideal fürs Handy.
 * **Jahr**: pro Mitarbeiter 12 Monate × 31 Tage, Auswertung je Eintragsart, Urlaubskonto (verplant/Rest).

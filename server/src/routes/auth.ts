@@ -44,6 +44,14 @@ export async function authRoutes(app: FastifyInstance, { db, secureCookies }: Ap
     return { ok: true };
   });
 
+  /** Persönliche Darstellung (gilt auf allen Geräten des Benutzers). */
+  app.put('/api/me/preferences', async (req) => {
+    const { user } = requireUser(req);
+    const b = z.object({ fontScale: z.number().min(0.8).max(2) }).parse(req.body);
+    db.prepare('UPDATE users SET font_scale = ? WHERE id = ?').run(Math.round(b.fontScale * 100) / 100, user.id);
+    return { ok: true };
+  });
+
   app.post('/api/auth/password', async (req) => {
     const { user } = requireUser(req);
     const body = z

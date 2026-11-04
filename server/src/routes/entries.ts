@@ -19,6 +19,8 @@ const entryBody = z.object({
 });
 
 const MAX_BULK_CELLS = 2000;
+/** Höchstzahl an Diensten/An-/Abwesenheiten (Einträge mit Eintragsart) je Mitarbeiter und Tag. Notizen zählen nicht mit. */
+export const MAX_TYPED_PER_CELL = 3;
 
 export async function entryRoutes(app: FastifyInstance, { db, hub }: AppContext) {
   const getEntry = db.prepare('SELECT * FROM entries WHERE id = ?');
@@ -71,12 +73,32 @@ export async function entryRoutes(app: FastifyInstance, { db, hub }: AppContext)
     audit(db, { userId, action: 'delete', entity: 'entry', entityId: row.id, employeeId: row.employee_id, date: row.date, before: toDTO(row) });
   }
 
+  /** Typisierte Einträge einer Zelle (ohne den Eintrag `exceptId`). */
+  function typedInCell(employeeId: number, date: string, exceptId = 0): EntryRow[] {
+    return db
+      .prepare('SELECT * FROM entries WHERE employee_id = ? AND date = ? AND type_id IS NOT NULL AND id != ?')
+      .all(employeeId, date, exceptId) as EntryRow[];
+  }
+
+  /** Prüft Obergrenze und doppelte Eintragsart für eine Zelle. */
+  function assertRoom(employeeId: number, date: string, typeId: number | null | undefined, exceptId = 0) {
+    if (typeId == null) return;
+    const typed = typedInCell(employeeId, date, exceptId);
+    if (typed.some((e) => e.type_id === typeId)) throw new HttpError(409, 'Diese Eintragsart ist an diesem Tag bereits eingetragen');
+    if (typed.length >= MAX_TYPED_PER_CELL) {
+      throw new HttpError(409, `Höchstens ${MAX_TYPED_PER_CELL} Dienste bzw. An-/Abwesenheiten pro Tag möglich`);
+    }
+  }
+
   app.post('/api/entries', async (req) => {
     const { user, perms } = requireUser(req);
     const body = entryBody.parse(req.body);
     assertCanEdit(perms, body.employeeId);
     assertType(body.typeId);
-    const row = db.transaction(() => insert(user.id, body))();
+    const row = db.transaction(() => {
+      assertRoom(body.employeeId, body.date, body.typeId);
+      return insert(user.id, body);
+    })();
     publish('upsert', [row], user.id);
     return toDTO(row);
   });
@@ -105,6 +127,9 @@ export async function entryRoutes(app: FastifyInstance, { db, hub }: AppContext)
         end_time: body.endTime !== undefined ? body.endTime : cur.end_time,
       };
       if (next.type_id == null && !next.text) throw new HttpError(400, 'Eintragsart oder Freitext erforderlich');
+      if (next.type_id !== cur.type_id || next.employee_id !== cur.employee_id || next.date !== cur.date) {
+        assertRoom(next.employee_id, next.date, next.type_id, cur.id);
+      }
       db.prepare(
         `UPDATE entries SET employee_id=?, date=?, type_id=?, text=?, start_time=?, end_time=?,
            version = version + 1, updated_by = ?, updated_at = datetime('now') WHERE id = ?`,
@@ -166,10 +191,18 @@ export async function entryRoutes(app: FastifyInstance, { db, hub }: AppContext)
     const result = db.transaction(() => {
       const created: EntryRow[] = [];
       const deleted: EntryRow[] = [];
+      let skipped = 0; // Zellen, in denen nichts hinzugefügt wurde (schon vorhanden bzw. voll)
       for (const c of body.cells) {
         const existing = db
           .prepare('SELECT * FROM entries WHERE employee_id = ? AND date = ?')
           .all(c.employeeId, c.date) as EntryRow[];
+        if (body.action === 'add' && body.typeId != null) {
+          const typed = existing.filter((e) => e.type_id != null);
+          if (typed.some((e) => e.type_id === body.typeId) || typed.length >= MAX_TYPED_PER_CELL) {
+            skipped++;
+            continue;
+          }
+        }
         const toDelete =
           body.action === 'clear' ? existing : body.action === 'set' ? existing.filter((e) => e.type_id != null) : [];
         // unverändert lassen, wenn die Zelle schon genau diesen Eintrag hat
@@ -198,12 +231,12 @@ export async function entryRoutes(app: FastifyInstance, { db, hub }: AppContext)
           );
         }
       }
-      return { created, deleted };
+      return { created, deleted, skipped };
     })();
 
     publish('delete', result.deleted, user.id);
     publish('upsert', result.created, user.id);
-    return { created: result.created.map(toDTO), deleted: result.deleted.map((d) => d.id) };
+    return { created: result.created.map(toDTO), deleted: result.deleted.map((d) => d.id), skipped: result.skipped };
   });
 
   /** Änderungshistorie einer Zelle (Mitarbeiter + Tag). */

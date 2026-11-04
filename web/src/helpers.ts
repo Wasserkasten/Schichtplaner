@@ -65,9 +65,10 @@ export function entryTitle(e: Entry, types: Map<number, EntryType>): string {
 }
 
 export function reportError(e: unknown) {
-  if (e instanceof ApiError && e.status === 409) {
+  // 409 mit aktuellem Stand = Bearbeitungskonflikt; andere 409 (z. B. „Höchstens 3 Dienste“) mit eigener Meldung
+  if (e instanceof ApiError && e.status === 409 && e.data) {
     store.toast('Konflikt: Jemand anderes hat diesen Eintrag gerade geändert. Die Ansicht wurde aktualisiert.', 'error');
-    if (e.data) store.upsert([e.data as Entry]);
+    store.upsert([e.data as Entry]);
     return;
   }
   store.toast((e as Error).message || 'Fehler', 'error');

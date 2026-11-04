@@ -7,7 +7,9 @@ Konzept, Rechtemodell und Fahrplan: **[docs/KONZEPT.md](docs/KONZEPT.md)** · In
 
 ## Funktionen
 
-- **Kalender**: Mitarbeiter (nach Team gruppiert) × Tage, KW, Wochenenden, Feiertage, Besetzung je Team.
+- **Kalender**: Mitarbeiter (nach Abteilung/Team gruppiert) × Tage über die volle Fensterbreite, KW, Wochenenden, Feiertage;
+  bis zu 3 Dienste pro Mitarbeiter und Tag.
+- **Schriftgröße** pro Benutzer einstellbar (Benutzermenü), gilt auf allen Geräten.
   Klick auf eine Zelle öffnet den Bearbeitungsdialog; mit dem **Pinsel** (Eintragsart wählen) lassen sich
   Zellen anklicken oder ganze Bereiche aufziehen.
 - **Tagesübersicht**: Wer hat welchen Dienst, wer ist abwesend, wer hat keinen Eintrag?

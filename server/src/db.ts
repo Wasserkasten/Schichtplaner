@@ -26,7 +26,15 @@ export function openDb(file: string): DB {
   db.pragma('foreign_keys = ON');
   db.pragma('busy_timeout = 5000');
   db.exec(loadSchema());
+  migrate(db);
   return db;
+}
+
+/** Ergänzt Spalten in bestehenden Datenbanken (CREATE TABLE IF NOT EXISTS ändert vorhandene Tabellen nicht). */
+function migrate(db: DB): void {
+  const has = (table: string, col: string) =>
+    (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).some((c) => c.name === col);
+  if (!has('users', 'font_scale')) db.exec('ALTER TABLE users ADD COLUMN font_scale REAL NOT NULL DEFAULT 1');
 }
 
 export function getSetting(db: DB, key: string, fallback = ''): string {

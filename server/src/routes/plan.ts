@@ -77,6 +77,7 @@ export async function planRoutes(app: FastifyInstance, { db, hub }: AppContext) 
         employeeId: user.employee_id,
         isAdmin: !!user.is_admin,
         mustChangePassword: !!user.must_change_password,
+        fontScale: user.font_scale ?? 1,
       },
       permissions: perms.toJSON(),
       departments: (departments as Record<string, unknown>[]).map((d) => ({ id: d.id, name: d.name, sortOrder: d.sort_order })),

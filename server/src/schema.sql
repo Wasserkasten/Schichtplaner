@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS users (
   is_admin       INTEGER NOT NULL DEFAULT 0,
   active         INTEGER NOT NULL DEFAULT 1,
   must_change_password INTEGER NOT NULL DEFAULT 0,
+  font_scale     REAL NOT NULL DEFAULT 1,      -- persönliche Schriftgröße (1 = 100 %)
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

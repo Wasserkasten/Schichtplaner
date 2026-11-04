@@ -252,3 +252,64 @@ describe('Quelle', () => {
     expect(by.find((d) => d.name === 'Rosenmontag')!.date).toBe('2026-02-16');
   });
 });
+
+describe('Mehrere Dienste pro Tag', () => {
+  const typeId = (code: string) => (db.prepare('SELECT id FROM entry_types WHERE code = ?').get(code) as { id: number }).id;
+  const post = (cookie: string, payload: object) => app.inject({ method: 'POST', url: '/api/entries', headers: { cookie }, payload });
+
+  it('bis zu drei Dienste, keine doppelte Eintragsart, Notizen zählen nicht mit', async () => {
+    const cookie = await login('anna');
+    const cell = { employeeId: ids.eA, date: '2026-11-12' };
+    for (const c of ['F', 'B', 'HO']) expect((await post(cookie, { ...cell, typeId: typeId(c) })).statusCode).toBe(200);
+    expect((await post(cookie, { ...cell, typeId: typeId('F') })).json().error).toContain('bereits eingetragen');
+    const fourth = await post(cookie, { ...cell, typeId: typeId('S') });
+    expect(fourth.statusCode).toBe(409);
+    expect(fourth.json().error).toContain('Höchstens 3');
+    expect((await post(cookie, { ...cell, text: 'Notiz geht trotzdem' })).statusCode).toBe(200);
+  });
+
+  it('Ändern in eine volle Zelle wird abgelehnt', async () => {
+    const cookie = await login('anna');
+    for (const c of ['F', 'B', 'HO']) await post(cookie, { employeeId: ids.eA, date: '2026-11-13', typeId: typeId(c) });
+    const other = (await post(cookie, { employeeId: ids.eA, date: '2026-11-14', typeId: typeId('S') })).json();
+    const res = await app.inject({ method: 'PATCH', url: `/api/entries/${other.id}`, headers: { cookie }, payload: { version: other.version, date: '2026-11-13' } });
+    expect(res.statusCode).toBe(409);
+  });
+
+  it('Pinsel "hinzufügen" ergänzt und überspringt volle bzw. schon belegte Tage', async () => {
+    const cookie = await login('anna');
+    await post(cookie, { employeeId: ids.eA, date: '2026-11-16', typeId: typeId('F') });
+    for (const c of ['F', 'B', 'HO']) await post(cookie, { employeeId: ids.eA, date: '2026-11-17', typeId: typeId(c) });
+    const res = await app.inject({
+      method: 'POST', url: '/api/entries/bulk', headers: { cookie },
+      payload: { action: 'add', typeId: typeId('B'), cells: ['2026-11-15', '2026-11-16', '2026-11-17'].map((date) => ({ employeeId: ids.eA, date })) },
+    });
+    expect(res.json()).toMatchObject({ skipped: 1 });
+    expect(res.json().created).toHaveLength(2);
+    const day16 = db.prepare("SELECT COUNT(*) n FROM entries WHERE employee_id = ? AND date = '2026-11-16'").get(ids.eA) as { n: number };
+    expect(day16.n).toBe(2); // F + B
+  });
+});
+
+describe('Persönliche Einstellungen', () => {
+  it('Schriftgröße wird je Benutzer gespeichert', async () => {
+    const cookie = await login('anna');
+    expect((await app.inject({ method: 'PUT', url: '/api/me/preferences', headers: { cookie }, payload: { fontScale: 1.3 } })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: '/api/bootstrap', headers: { cookie } })).json().me.fontScale).toBe(1.3);
+    expect((await app.inject({ method: 'PUT', url: '/api/me/preferences', headers: { cookie }, payload: { fontScale: 5 } })).statusCode).toBe(400);
+  });
+
+  it('bestehende Datenbank ohne Spalte wird beim Öffnen ergänzt', async () => {
+    const { mkdtempSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const Database = (await import('better-sqlite3')).default;
+    const file = join(mkdtempSync(join(tmpdir(), 'sp-mig-')), 'alt.db');
+    const old = new Database(file);
+    old.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT NOT NULL UNIQUE COLLATE NOCASE, display_name TEXT NOT NULL, password_hash TEXT NOT NULL, employee_id INTEGER, is_admin INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1, must_change_password INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')))");
+    old.close();
+    const migrated = openDb(file);
+    const cols = (migrated.prepare('PRAGMA table_info(users)').all() as { name: string }[]).map((c) => c.name);
+    expect(cols).toContain('font_scale');
+  });
+});

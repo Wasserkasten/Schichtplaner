@@ -12,6 +12,8 @@ import { TeamFilter } from './components/TeamFilter';
 import { ViewMenu } from './components/ViewMenu';
 import { PasswordDialog } from './components/PasswordDialog';
 import { Toasts } from './components/Toasts';
+import { FONT_STEPS, applyFontScale, nextStep, saveFontScale } from './fontScale';
+import { reportError } from './helpers';
 
 export type Kind = ViewConfig['kind'] | 'admin';
 
@@ -47,6 +49,7 @@ export function App() {
   async function init() {
     try {
       const boot = await store.loadBootstrap();
+      applyFontScale(boot.me.fontScale ?? 1);
       const v = await get<SavedView[]>('/api/views');
       setViews(v);
       const def = v.find((x) => x.isDefault);
@@ -130,6 +133,7 @@ export function App() {
           <div className="menu">
             <button onClick={() => setPwOpen(true)}>Passwort ändern</button>
             <button onClick={() => void logout()}>Abmelden</button>
+            <FontSizeControl value={boot.me.fontScale} />
           </div>
         </details>
       </header>
@@ -141,6 +145,28 @@ export function App() {
       </main>
       {pwOpen && <PasswordDialog forced={boot.me.mustChangePassword} onClose={() => { setPwOpen(false); void store.loadBootstrap(); }} />}
       <Toasts />
+    </div>
+  );
+}
+
+/** Schriftgröße im Benutzermenü: gilt für dieses Benutzerkonto auf allen Geräten. */
+function FontSizeControl({ value }: { value: number }) {
+  const set = async (v: number) => {
+    try {
+      await saveFontScale(v);
+      await store.loadBootstrap();
+    } catch (e) {
+      reportError(e);
+    }
+  };
+  const min = FONT_STEPS[0];
+  const max = FONT_STEPS[FONT_STEPS.length - 1];
+  return (
+    <div className="fontsize" title="Schriftgröße – gilt für dein Konto auf allen Geräten">
+      <span className="small">Schrift</span>
+      <button aria-label="Schrift kleiner" disabled={value <= min} onClick={() => void set(nextStep(value, -1))}>A−</button>
+      <button className="val" aria-label="Schriftgröße zurücksetzen" title="auf 100 % zurücksetzen" onClick={() => void set(1)}>{Math.round(value * 100)} %</button>
+      <button aria-label="Schrift größer" disabled={value >= max} onClick={() => void set(nextStep(value, 1))}>A+</button>
     </div>
   );
 }

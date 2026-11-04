@@ -210,11 +210,20 @@ Alles Folgende geschieht im Browser unter **Verwaltung** (nur für Administrator
 *Verwaltung → An-/Abwesenheitsarten*: Vorbelegt sind übliche Dienste (F, S, N, T, B), Anwesenheiten (HO, DR, FB) und Abwesenheiten (U, FA, SU, K, KK).
 Diese Werte am besten an die bisherigen Kürzel aus schichtplaner.de anpassen, damit sich niemand umgewöhnen muss.
 
-- **Kategorie**: entscheidet, wo der Eintrag in der Tagesübersicht erscheint (*Im Dienst*, *Sonstige Anwesenheit* oder *Abwesend*). Nur Dienste zählen zur Besetzungszahl.
+- **Kategorie**: entscheidet, wo der Eintrag in der Tagesübersicht erscheint (*Im Dienst*, *Sonstige Anwesenheit* oder *Abwesend*).
 - **Beginn/Ende**: Standardzeiten (pro Eintrag überschreibbar)
 - **zählt als Urlaub**: geht in das Urlaubskonto im Jahreskalender ein
 - **vertraulich**: z. B. Krank. Klartext sehen nur Benutzer, die das Team bearbeiten dürfen, und der Mitarbeiter selbst; alle anderen sehen „abwesend“
 - Nicht mehr benötigte Arten auf **inaktiv** setzen statt sie zu löschen; alte Einträge bleiben dann lesbar.
+
+**Mehrere Dienste an einem Tag:** Ein Mitarbeiter kann an einem Tag bis zu **3** Dienste bzw. An-/Abwesenheiten haben, z. B.
+IV-Dienst und Telefondienst (dieselbe Art nicht doppelt; Notizen zählen nicht mit). Dafür die Arten hier anlegen und im Kalender:
+
+- im Zell-Dialog unter *Neuer Eintrag* hinzufügen – an einem einzelnen Tag wird standardmäßig **zusätzlich** eingetragen,
+  über einen Zeitraum (z. B. Urlaub) werden vorhandene Dienste ersetzt; beides lässt sich mit dem Häkchen umschalten, oder
+- mit dem Pinsel bei gesetztem Häkchen **„zusätzlich eintragen“** bzw. mit **Strg** (Mac: ⌘) beim Klicken.
+
+Tage, die schon voll sind oder die Art bereits haben, werden dabei übersprungen (mit Hinweis).
 
 ### 3.4 Mitarbeiter
 
@@ -249,8 +258,14 @@ Es gilt immer die höchste zutreffende Stufe.
 
 ### 3.6 Ansichten
 
-Jeder Benutzer kann im Menü **Ansichten** die aktuelle Auswahl speichern (Ansicht + Teamfilter) und eine davon als **Standardansicht**
-festlegen; sie öffnet sich nach der Anmeldung. Administratoren können Ansichten **für alle freigeben**, z. B. „Leitstelle gesamt“.
+Jeder Benutzer kann im Menü **Ansichten** die aktuelle Auswahl speichern (Ansicht + Teamfilter + Zeitraum) und eine davon als
+**Standardansicht** festlegen; sie öffnet sich nach der Anmeldung. Administratoren können Ansichten **für alle freigeben**, z. B. „Leitstelle gesamt“.
+
+Der Kalender nutzt immer die volle Fensterbreite. Als **Zeitraum** gibt es *Monat*, 7/14 Tage, 4/6 Wochen und **Fensterbreite** –
+dann werden so viele Tage gezeigt, wie nebeneinander passen (auf einem 1920-px-Bildschirm etwa 50), ab Montag der aktuellen Woche.
+
+**Schriftgröße:** im Benutzermenü oben rechts mit **A−** / **A+** (90 % bis 175 %, Klick auf die Prozentzahl = 100 %). Die Einstellung
+gehört zum Benutzerkonto und gilt damit auf allen Geräten – auch, wenn sich mehrere Kollegen einen PC teilen.
 
 ### 3.7 Als App installieren (PWA)
 

@@ -7,6 +7,8 @@ export interface Me {
   employeeId: number | null;
   isAdmin: boolean;
   mustChangePassword: boolean;
+  /** persönliche Schriftgröße, 1 = 100 % */
+  fontScale: number;
 }
 export interface Department { id: number; name: string; sortOrder: number }
 export interface Team { id: number; departmentId: number; name: string; sortOrder: number; level: Level }

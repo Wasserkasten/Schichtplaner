@@ -46,7 +46,7 @@ export function CellEditor({ employeeId, date, onClose }: { employeeId: number; 
   );
 }
 
-function TypeSelect({ value, onChange }: { value: number | null; onChange: (v: number | null) => void }) {
+function TypeSelect({ value, onChange, disabledIds = [] }: { value: number | null; onChange: (v: number | null) => void; disabledIds?: number[] }) {
   const { boot } = useStore();
   return (
     <select value={value ?? ''} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
@@ -56,8 +56,8 @@ function TypeSelect({ value, onChange }: { value: number | null; onChange: (v: n
           {boot!.entryTypes
             .filter((t) => t.category === cat && (t.active || t.id === value))
             .map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.code} – {t.name}
+              <option key={t.id} value={t.id} disabled={disabledIds.includes(t.id) && t.id !== value}>
+                {t.code} – {t.name}{disabledIds.includes(t.id) && t.id !== value ? ' (schon eingetragen)' : ''}
               </option>
             ))}
         </optgroup>
@@ -126,12 +126,21 @@ function EntryEditRow({ e }: { e: Entry }) {
   );
 }
 
+/** Höchstzahl Dienste/An-/Abwesenheiten je Tag – wie auf dem Server (MAX_TYPED_PER_CELL). */
+const MAX_TYPED = 3;
+
 function NewEntry({ employeeId, date }: { employeeId: number; date: string }) {
+  const st = useStore();
   const [typeId, setTypeId] = useState<number | null>(null);
   const [text, setText] = useState('');
   const [until, setUntil] = useState(date);
   const [workdaysOnly, setWorkdaysOnly] = useState(true);
-  const [replace, setReplace] = useState(true);
+  // null = automatisch: an einem einzelnen Tag zusätzlich eintragen, über einen Zeitraum (z. B. Urlaub) ersetzen
+  const [replaceChoice, setReplace] = useState<boolean | null>(null);
+  const range = until !== date;
+  const replace = replaceChoice ?? range;
+  const typed = st.cell(employeeId, date).filter((e) => e.typeId);
+  const full = !range && !replace && !!typeId && typed.length >= MAX_TYPED;
 
   async function add() {
     const dates: string[] = [];
@@ -140,7 +149,7 @@ function NewEntry({ employeeId, date }: { employeeId: number; date: string }) {
       dates.push(d);
     }
     try {
-      const res = await post<{ created: Entry[]; deleted: number[] }>('/api/entries/bulk', {
+      const res = await post<{ created: Entry[]; deleted: number[]; skipped: number }>('/api/entries/bulk', {
         action: typeId && replace ? 'set' : 'add',
         cells: dates.map((d) => ({ employeeId, date: d })),
         typeId,
@@ -148,6 +157,7 @@ function NewEntry({ employeeId, date }: { employeeId: number; date: string }) {
       });
       store.remove(res.deleted);
       store.upsert(res.created);
+      if (res.skipped) store.toast(`${res.skipped} ${res.skipped === 1 ? 'Tag' : 'Tage'} übersprungen: dort schon eingetragen oder bereits ${MAX_TYPED} Dienste.`);
       setText('');
       setTypeId(null);
     } catch (err) {
@@ -157,9 +167,12 @@ function NewEntry({ employeeId, date }: { employeeId: number; date: string }) {
 
   return (
     <div className="entry-new">
-      <h3>Neuer Eintrag</h3>
+      <h3>
+        Neuer Eintrag
+        {typed.length > 0 && <span className="muted small"> · an diesem Tag {typed.length} von {MAX_TYPED} Diensten eingetragen</span>}
+      </h3>
       <div className="grid2">
-        <label>Art<TypeSelect value={typeId} onChange={setTypeId} /></label>
+        <label>Art<TypeSelect value={typeId} onChange={setTypeId} disabledIds={range || replace ? [] : typed.map((e) => e.typeId!)} /></label>
         <label>Freitext / Notiz<input value={text} maxLength={200} placeholder="z. B. Arzttermin 10 Uhr" onChange={(e) => setText(e.target.value)} /></label>
         <label>Bis einschließlich<input type="date" value={until} min={date} onChange={(e) => setUntil(e.target.value || date)} /></label>
         <div className="checks">
@@ -167,12 +180,15 @@ function NewEntry({ employeeId, date }: { employeeId: number; date: string }) {
             <label><input type="checkbox" checked={workdaysOnly} onChange={(e) => setWorkdaysOnly(e.target.checked)} /> nur Werktage</label>
           )}
           {typeId && (
-            <label><input type="checkbox" checked={replace} onChange={(e) => setReplace(e.target.checked)} /> vorhandene Dienste ersetzen</label>
+            <label title="Aus: zusätzlich eintragen (bis zu 3 Dienste pro Tag). An: vorhandene Dienste werden ersetzt, Notizen bleiben.">
+              <input type="checkbox" checked={replace} onChange={(e) => setReplace(e.target.checked)} /> vorhandene Dienste ersetzen
+            </label>
           )}
         </div>
       </div>
+      {full && <p className="small warn">An diesem Tag sind schon {MAX_TYPED} Dienste eingetragen. Einen entfernen oder „vorhandene Dienste ersetzen“ wählen.</p>}
       <div className="actions">
-        <button className="primary" disabled={!typeId && !text.trim()} onClick={() => void add()}>Hinzufügen</button>
+        <button className="primary" disabled={(!typeId && !text.trim()) || full} onClick={() => void add()}>Hinzufügen</button>
       </div>
     </div>
   );
