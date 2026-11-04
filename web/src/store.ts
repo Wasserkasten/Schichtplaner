@@ -77,7 +77,12 @@ class Store {
   async loadHolidays(year: number) {
     if (this.holidays.has(year)) return;
     this.holidays.set(year, []);
-    this.holidays.set(year, await get<Holiday[]>(`/api/holidays?year=${year}`));
+    try {
+      this.holidays.set(year, await get<Holiday[]>(`/api/holidays?year=${year}`));
+    } catch (e) {
+      this.holidays.delete(year); // beim nächsten Mal erneut versuchen
+      throw e;
+    }
     this.emit();
   }
 
@@ -133,6 +138,10 @@ class Store {
       const msg = JSON.parse((ev as MessageEvent).data) as { action: 'upsert' | 'delete'; items: Entry[] };
       if (msg.action === 'upsert') this.upsert(msg.items);
       else this.remove(msg.items.map((i) => i.id));
+    });
+    es.addEventListener('holidays', () => {
+      this.holidays.clear(); // werden beim nächsten Zeichnen neu geladen
+      this.emit();
     });
     es.addEventListener('masterdata', (ev) => {
       const msg = JSON.parse((ev as MessageEvent).data || '{}') as { reloadEntries?: boolean };

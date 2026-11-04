@@ -182,3 +182,73 @@ describe('Beispieldaten', () => {
     expect(count('employees')).toBe(22); // nichts gelöscht
   });
 });
+
+describe('Feiertage verwalten', () => {
+  const holidaysOf = async (cookie: string, year: number) =>
+    (await app.inject({ method: 'GET', url: `/api/holidays?year=${year}`, headers: { cookie } })).json() as { id: number; date: string; name: string; kind: string; fromSource: boolean }[];
+
+  it('Jahr wird beim ersten Abruf automatisch mit gesetzlichen Feiertagen befüllt', async () => {
+    const list = await holidaysOf(await login('anna'), 2027);
+    expect(list.find((h) => h.name === 'Fronleichnam')).toMatchObject({ kind: 'public', fromSource: true }); // NW
+    expect(list.some((h) => h.name === 'Rosenmontag')).toBe(false); // kein Feiertag
+  });
+
+  it('Quelle bietet arbeitsfreie Tage an; Übernehmen, Anlegen, Ändern, Löschen', async () => {
+    const admin = await login('admin');
+    const src = (await app.inject({ method: 'GET', url: '/api/admin/holidays/source?year=2027', headers: { cookie: admin } })).json();
+    const rosen = src.items.find((i: { name: string }) => i.name === 'Rosenmontag');
+    expect(rosen).toMatchObject({ date: '2027-02-08', kind: 'company', group: 'common', status: 'missing' });
+    expect(src.items.find((i: { name: string }) => i.name === 'Neujahr').status).toBe('present');
+
+    const pick = src.items.filter((i: { name: string }) => ['Rosenmontag', 'Heiligabend', 'Silvester'].includes(i.name));
+    const imp = await app.inject({ method: 'POST', url: '/api/admin/holidays/import', headers: { cookie: admin }, payload: { year: 2027, items: pick } });
+    expect(imp.json()).toEqual({ imported: 3, removed: 0 });
+
+    const created = await app.inject({ method: 'POST', url: '/api/admin/holidays', headers: { cookie: admin }, payload: { date: '2027-06-18', name: 'Betriebsausflug', kind: 'company' } });
+    expect(created.statusCode).toBe(200);
+    expect((await app.inject({ method: 'POST', url: '/api/admin/holidays', headers: { cookie: admin }, payload: { date: '2027-06-18', name: 'Doppelt', kind: 'company' } })).statusCode).toBe(409);
+
+    let list = await holidaysOf(admin, 2027);
+    const neujahr = list.find((h) => h.name === 'Neujahr')!;
+    await app.inject({ method: 'PUT', url: `/api/admin/holidays/${neujahr.id}`, headers: { cookie: admin }, payload: { date: neujahr.date, name: 'Neujahr (Betrieb geschlossen)', kind: 'public' } });
+    const allerheiligen = list.find((h) => h.name === 'Allerheiligen')!;
+    expect((await app.inject({ method: 'DELETE', url: `/api/admin/holidays/${allerheiligen.id}`, headers: { cookie: admin } })).statusCode).toBe(200);
+
+    list = await holidaysOf(admin, 2027);
+    expect(list.find((h) => h.date === '2027-12-24')).toMatchObject({ name: 'Heiligabend', kind: 'company' });
+    expect(list.find((h) => h.date === '2027-06-18')).toMatchObject({ name: 'Betriebsausflug', fromSource: false });
+    expect(list.find((h) => h.date === '2027-01-01')).toMatchObject({ name: 'Neujahr (Betrieb geschlossen)', fromSource: false });
+    expect(list.some((h) => h.name === 'Allerheiligen')).toBe(false);
+    // gelöschter Feiertag wird nicht von selbst wieder angelegt
+    expect((await holidaysOf(admin, 2027)).some((h) => h.name === 'Allerheiligen')).toBe(false);
+  });
+
+  it('nur Administratoren dürfen ändern', async () => {
+    const anna = await login('anna');
+    expect((await app.inject({ method: 'POST', url: '/api/admin/holidays', headers: { cookie: anna }, payload: { date: '2027-06-18', name: 'X', kind: 'company' } })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'GET', url: '/api/admin/holidays/source?year=2027', headers: { cookie: anna } })).statusCode).toBe(403);
+  });
+
+  it('Wechsel des Bundeslandes tauscht nur unveränderte gesetzliche Feiertage aus', async () => {
+    const admin = await login('admin');
+    await holidaysOf(admin, 2027); // Jahr einrichten (NW)
+    await app.inject({ method: 'POST', url: '/api/admin/holidays', headers: { cookie: admin }, payload: { date: '2027-12-24', name: 'Heiligabend', kind: 'company' } });
+    const res = await app.inject({ method: 'PUT', url: '/api/admin/settings', headers: { cookie: admin }, payload: { holidayState: 'SN', ownTeamLevel: 'edit', defaultLevel: 'view' } });
+    expect(res.statusCode).toBe(200);
+    const names = (await holidaysOf(admin, 2027)).map((h) => h.name);
+    expect(names).toContain('Buß- und Bettag'); // neu (SN)
+    expect(names).toContain('Reformationstag'); // neu (SN)
+    expect(names).not.toContain('Fronleichnam'); // NW-Feiertag entfernt
+    expect(names).toContain('Heiligabend'); // eigener Eintrag bleibt
+  });
+});
+
+describe('Quelle', () => {
+  it('liefert regionale Feiertage gesondert', async () => {
+    const { sourceDays } = await import('../src/holidays.js');
+    const by = sourceDays(2026, 'BY');
+    expect(by.find((d) => d.name === 'Mariä Himmelfahrt')).toMatchObject({ group: 'regional', date: '2026-08-15' });
+    expect(by.find((d) => d.name === 'Heiligabend')).toMatchObject({ group: 'common', kind: 'company' });
+    expect(by.find((d) => d.name === 'Rosenmontag')!.date).toBe('2026-02-16');
+  });
+});

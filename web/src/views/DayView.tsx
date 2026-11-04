@@ -85,7 +85,7 @@ export function DayView({ nav, setNav }: { nav: NavState; setNav: (n: NavState) 
         <button onClick={() => setNav({ ...nav, date: addDays(date, 1) })} aria-label="Folgetag">▶</button>
         <input type="date" value={date} onChange={(e) => e.target.value && setNav({ ...nav, date: e.target.value })} />
         <h1>{fmtLong(date)}</h1>
-        {holiday && <span className="badge">{holiday.name}</span>}
+        {holiday && <span className={holiday.kind === 'company' ? 'badge free' : 'badge'}>{holiday.name}{holiday.kind === 'company' ? ' · arbeitsfrei' : ''}</span>}
       </div>
       <div className="day-columns">
         {section('shift', 'Im Dienst')}

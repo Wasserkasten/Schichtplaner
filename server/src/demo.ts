@@ -8,7 +8,7 @@ import type { DB } from './db.js';
 import { getSetting, setSetting } from './db.js';
 import { hashPassword } from './auth.js';
 import { ensureEntryTypes } from './seed-lib.js';
-import { holidays } from './holidays.js';
+import { listHolidays } from './holiday-store.js';
 
 const KEY = 'demo_data';
 export const DEMO_PASSWORD = 'demo1234';
@@ -133,9 +133,9 @@ export function insertDemoData(db: DB, today = new Date()): DemoSummary {
 
   const start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1));
   const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 2, 0));
-  const state = getSetting(db, 'holiday_state', 'NW');
+  // gespeicherte Feiertage und arbeitsfreie Tage (so wie im Plan angezeigt)
   const holidaySet = new Set(
-    [start.getUTCFullYear(), end.getUTCFullYear()].flatMap((y) => holidays(y, state).map((h) => h.date)),
+    [...new Set([start.getUTCFullYear(), end.getUTCFullYear()])].flatMap((y) => listHolidays(db, y).map((h) => h.date)),
   );
   const days: string[] = [];
   for (let d = start; d <= end; d = new Date(d.getTime() + 86400_000)) days.push(iso(d));

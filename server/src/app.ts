@@ -12,6 +12,7 @@ import { planRoutes } from './routes/plan.js';
 import { entryRoutes } from './routes/entries.js';
 import { adminRoutes } from './routes/admin.js';
 import { viewRoutes } from './routes/views.js';
+import { holidayRoutes } from './routes/holidays.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -97,6 +98,7 @@ export async function buildApp(opts: {
     await entryRoutes(api, ctx);
     await adminRoutes(api, ctx);
     await viewRoutes(api, ctx);
+    await holidayRoutes(api, ctx);
   });
 
   if (opts.staticDir && existsSync(opts.staticDir)) {

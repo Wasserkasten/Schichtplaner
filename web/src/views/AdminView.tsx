@@ -4,8 +4,9 @@ import { store, useStore } from '../store';
 import { departmentName, fullName, reportError, sortedTeams, teamLabel, teamsByDepartment } from '../helpers';
 import type { Employee, EntryType, Level } from '../types';
 import { Modal } from '../components/Modal';
+import { HolidayAdmin } from './HolidayAdmin';
 
-type Tab = 'employees' | 'structure' | 'users' | 'types' | 'settings' | 'audit';
+type Tab = 'employees' | 'structure' | 'users' | 'types' | 'holidays' | 'settings' | 'audit';
 
 export function AdminView() {
   const { boot } = useStore();
@@ -16,6 +17,7 @@ export function AdminView() {
     ['structure', 'Abteilungen & Teams', isAdmin],
     ['users', 'Benutzer & Rechte', isAdmin],
     ['types', 'An-/Abwesenheitsarten', isAdmin],
+    ['holidays', 'Feiertage', isAdmin],
     ['settings', 'Einstellungen', isAdmin],
     ['audit', 'Protokoll', isAdmin],
   ];
@@ -32,6 +34,7 @@ export function AdminView() {
       {tab === 'structure' && <Structure />}
       {tab === 'users' && <Users />}
       {tab === 'types' && <Types />}
+      {tab === 'holidays' && <HolidayAdmin stateName={(c) => STATES[c] ?? c} />}
       {tab === 'settings' && (
         <>
           <Settings />
@@ -357,6 +360,7 @@ function Settings() {
         <select value={s.holidayState} onChange={(e) => setS({ ...s, holidayState: e.target.value })}>
           {Object.entries(STATES).map(([k, n]) => <option key={k} value={k}>{n}</option>)}
         </select>
+        <span className="muted small">Quelle für die gesetzlichen Feiertage. Beim Wechsel werden sie in allen Jahren ausgetauscht; eigene und geänderte Einträge unter <em>Feiertage</em> bleiben erhalten.</span>
       </label>
       <label>Recht aller Benutzer auf alle Teams
         <select value={s.defaultLevel} onChange={(e) => setS({ ...s, defaultLevel: e.target.value })}>
@@ -368,7 +372,7 @@ function Settings() {
           <option value="none">keins</option><option value="view">ansehen</option><option value="edit">bearbeiten</option><option value="manage">verwalten</option>
         </select>
       </label>
-      <button className="primary" onClick={() => void run(async () => { await put('/api/admin/settings', s); store.holidays.clear(); })}>Speichern</button>
+      <button className="primary" onClick={() => void run(async () => { await put('/api/admin/settings', s); })}>Speichern</button>
     </div>
   );
 }

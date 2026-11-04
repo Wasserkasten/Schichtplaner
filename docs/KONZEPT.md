@@ -32,7 +32,7 @@ Eintragsart (Dienst | sonstige Anwesenheit | Abwesenheit)
   Dienste F/S/N/T/B · Anwesenheit Homeoffice, Dienstreise, Fortbildung ·
   Abwesenheit Urlaub, Freizeitausgleich, Sonderurlaub, Krank, Kind krank.
   Eigenschaften: Kürzel, Farbe, Standardzeiten, „zählt als Urlaub“, „vertraulich“.
-* **Feiertage** werden je Bundesland berechnet (einstellbar) und im Plan markiert.
+* **Feiertage** werden je Bundesland berechnet (eingebaute Quelle) und gespeichert; Administratoren können sie übernehmen, ändern, löschen und um **betrieblich arbeitsfreie Tage** (Heiligabend, Silvester, Rosenmontag …) ergänzen. Beide werden im Plan markiert und nicht als Urlaubstag gezählt.
 
 ## 3. Berechtigungen
 

@@ -4,6 +4,7 @@ import { HttpError, requireAdmin, requireUser, type AppContext } from '../app.js
 import { audit, getSetting, setSetting } from '../db.js';
 import { hashPassword } from '../auth.js';
 import { DemoError, demoSummary, insertDemoData, removeDemoData } from '../demo.js';
+import { resyncOfficial } from '../holiday-store.js';
 
 const idParam = z.object({ id: z.coerce.number().int() });
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/);
@@ -324,11 +325,16 @@ export async function adminRoutes(app: FastifyInstance, { db, hub }: AppContext)
         defaultLevel: z.enum(['none', 'view', 'edit']),
       })
       .parse(req.body);
-    return change(user.id, 'settings', 'update', () => {
+    const stateChanged = b.holidayState !== getSetting(db, 'holiday_state', 'NW');
+    const result = change(user.id, 'settings', 'update', () => {
       setSetting(db, 'holiday_state', b.holidayState);
+      // neues Bundesland: unveränderte gesetzliche Feiertage in allen eingerichteten Jahren austauschen
+      if (stateChanged) resyncOfficial(db);
       setSetting(db, 'own_team_level', b.ownTeamLevel);
       setSetting(db, 'default_level', b.defaultLevel);
       return { id: 0, after: b, ret: b };
     });
+    if (stateChanged) hub.broadcast('holidays', () => ({}));
+    return result;
   });
 }

@@ -126,3 +126,17 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 INSERT OR IGNORE INTO settings(key, value) VALUES ('own_team_level', 'edit');
 INSERT OR IGNORE INTO settings(key, value) VALUES ('holiday_state', 'NW');
+
+-- Feiertage und betrieblich arbeitsfreie Tage (bearbeitbar).
+-- from_source = 1: aus der eingebauten Quelle übernommen und seitdem nicht geändert.
+CREATE TABLE IF NOT EXISTS holidays (
+  id          INTEGER PRIMARY KEY,
+  date        TEXT NOT NULL UNIQUE,
+  name        TEXT NOT NULL,
+  kind        TEXT NOT NULL DEFAULT 'public' CHECK (kind IN ('public','company')),
+  from_source INTEGER NOT NULL DEFAULT 0
+);
+-- Jahre, die bereits eingerichtet sind (werden nicht erneut automatisch befüllt).
+CREATE TABLE IF NOT EXISTS holiday_years (
+  year INTEGER PRIMARY KEY
+);

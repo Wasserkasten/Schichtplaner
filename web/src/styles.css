@@ -9,6 +9,7 @@
   --accent-soft: #e3edf7;
   --we: #eef1f5;
   --hol: #fdeedd;
+  --free: #e6f2e3;
   --today: #fff8c4;
   --danger: #c0392b;
   --cell-w: 34px;
@@ -29,6 +30,7 @@
     --accent-soft: #23364a;
     --we: #20262e;
     --hol: #3a2d1f;
+    --free: #1f3122;
     --today: #3d3a1c;
   }
 }
@@ -121,6 +123,11 @@ table.plan { border-collapse: separate; border-spacing: 0; font-size: 12px; user
 .plan.painting td.editable { cursor: crosshair; user-select: none; }
 .plan .we { background: var(--we); }
 .plan .hol { background: var(--hol); }
+.plan .hol.free { background: var(--free); }
+.swatch { display: inline-block; width: 14px; height: 14px; border: 1px solid var(--line-strong); border-radius: 3px; vertical-align: middle; }
+.swatch.hol { background: var(--hol); }
+.swatch.hol.free { background: var(--free); }
+.badge.free { background: #3f7d3a; }
 .plan .today { background: var(--today); }
 .plan thead .today { box-shadow: inset 0 -3px 0 var(--accent); }
 .plan td.sel { box-shadow: inset 0 0 0 2px var(--accent); background: var(--accent-soft); }
@@ -179,6 +186,11 @@ label.inline { flex-direction: row !important; align-items: center; gap: 6px !im
 table.simple { border-collapse: collapse; width: 100%; background: var(--panel); font-size: 13px; }
 table.simple th, table.simple td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
 table.simple tr.inactive td { color: var(--muted); text-decoration: line-through; }
+table.simple tr.inactive-soft td { color: var(--muted); }
+.import-group { margin-bottom: 14px; }
+.import-group h3 { display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; }
+.warn { color: #b3541e; }
+.holidays table.simple td.row { margin: 0; }
 .structure ul { list-style: none; padding: 0; }
 
 .login { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }

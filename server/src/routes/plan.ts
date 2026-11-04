@@ -2,7 +2,6 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireUser, type AppContext } from '../app.js';
 import { getSetting } from '../db.js';
-import { holidays } from '../holidays.js';
 import { EntryContext, type EntryRow } from '../entries.js';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -87,12 +86,6 @@ export async function planRoutes(app: FastifyInstance, { db, hub }: AppContext) 
       users,
       settings: { holidayState: getSetting(db, 'holiday_state', 'NW') },
     };
-  });
-
-  app.get('/api/holidays', async (req) => {
-    requireUser(req);
-    const { year } = z.object({ year: z.coerce.number().int().min(1900).max(2200) }).parse(req.query);
-    return holidays(year, getSetting(db, 'holiday_state', 'NW'));
   });
 
   /** Einträge eines Zeitraums (optional auf Mitarbeiter eingeschränkt). */

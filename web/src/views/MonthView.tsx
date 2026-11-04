@@ -4,7 +4,7 @@ import { post } from '../api';
 import { store, useStore } from '../store';
 import { MONTHS, WEEKDAYS, addDays, addMonths, daysInMonth, isWeekend, isoWeek, monthStart, parse, range, today, weekday } from '../dates';
 import { canEditEmployee, departmentName, groupedEmployees, reportError, teamLabel, typeMap } from '../helpers';
-import type { Entry } from '../types';
+import type { Entry, Holiday } from '../types';
 import { EntryChip } from '../components/EntryChip';
 import { CellEditor } from '../components/CellEditor';
 
@@ -152,7 +152,7 @@ export function MonthView({ nav, setNav }: { nav: NavState; setNav: (n: NavState
               {days.map((d) => {
                 const h = st.holidayOn(d);
                 return (
-                  <th key={d} className={dayClass(d, t, !!h)} title={h?.name}>
+                  <th key={d} className={dayClass(d, t, h)} title={holidayTitle(h)}>
                     <button className="daylink" onClick={() => setNav({ ...nav, kind: 'day', date: d })}>
                       <span className="wd">{WEEKDAYS[weekday(d)]}</span>
                       <span className="dn">{d.slice(8)}</span>
@@ -174,7 +174,7 @@ export function MonthView({ nav, setNav }: { nav: NavState; setNav: (n: NavState
                 <tr className="team-row">
                   <th className="sticky-col" title={teamLabel(boot, g.team.id)}>{g.team.name}</th>
                   {days.map((d) => (
-                    <td key={d} className={dayClass(d, t, !!st.holidayOn(d))} title="Besetzung (Dienste)">
+                    <td key={d} className={dayClass(d, t, st.holidayOn(d))} title="Besetzung (Dienste)">
                       {coverage(g.employees.map((e) => e.id), d) || ''}
                     </td>
                   ))}
@@ -196,7 +196,7 @@ export function MonthView({ nav, setNav }: { nav: NavState; setNav: (n: NavState
                         return (
                           <td
                             key={d}
-                            className={`${dayClass(d, t, !!st.holidayOn(d))} cell${editable ? ' editable' : ''}${inSel(ei, di) ? ' sel' : ''}`}
+                            className={`${dayClass(d, t, st.holidayOn(d))} cell${editable ? ' editable' : ''}${inSel(ei, di) ? ' sel' : ''}`}
                             onPointerDown={(e) => editable && onDown(ei, di, e)}
                             onPointerEnter={() => onEnter(ei, di)}
                             onClick={() => brush === null && setEditing({ employeeId: emp.id, date: d })}
@@ -237,14 +237,22 @@ function EscToSelect({ onEsc }: { onEsc: () => void }) {
   return null;
 }
 
-export function dayClass(d: string, t: string, holiday: boolean): string {
-  return [isWeekend(d) ? 'we' : '', holiday ? 'hol' : '', d === t ? 'today' : ''].filter(Boolean).join(' ');
+export function dayClass(d: string, t: string, holiday?: Holiday): string {
+  return [isWeekend(d) ? 'we' : '', holiday ? (holiday.kind === 'company' ? 'hol free' : 'hol') : '', d === t ? 'today' : '']
+    .filter(Boolean)
+    .join(' ');
+}
+
+export function holidayTitle(h?: Holiday): string | undefined {
+  return h ? `${h.name} (${h.kind === 'company' ? 'arbeitsfrei' : 'Feiertag'})` : undefined;
 }
 
 export function Legend() {
   const { boot } = useStore();
   return (
     <div className="legend">
+      <span><span className="swatch hol" /> Feiertag</span>
+      <span><span className="swatch hol free" /> arbeitsfreier Tag</span>
       {boot!.entryTypes
         .filter((t) => t.active)
         .map((t) => (

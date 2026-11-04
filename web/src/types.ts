@@ -48,7 +48,8 @@ export interface Entry {
   updatedAt: string;
   masked?: boolean;
 }
-export interface Holiday { date: string; name: string }
+/** public = gesetzlicher Feiertag, company = betrieblich arbeitsfreier Tag (z. B. Heiligabend) */
+export interface Holiday { id: number; date: string; name: string; kind: 'public' | 'company'; fromSource: boolean }
 export interface Bootstrap {
   me: Me;
   permissions: { isAdmin: boolean; teams: Record<string, Level> };

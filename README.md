@@ -18,6 +18,7 @@ Konzept, Rechtemodell und Fahrplan: **[docs/KONZEPT.md](docs/KONZEPT.md)** · In
 - **Änderungsprotokoll** mit Verlauf pro Zelle.
 - **Mehrbenutzer**: Live-Updates (Server-Sent Events) und Konflikterkennung.
 - **PWA**: auf Handy und PC installierbar, responsives Layout.
+- **Feiertage** je Bundesland plus eigene arbeitsfreie Tage (Heiligabend, Silvester, Rosenmontag …), pflegbar unter *Verwaltung → Feiertage*.
 - **Beispieldaten** per Klick einfügen und wieder entfernen (*Verwaltung → Einstellungen*).
 
 ## Installation

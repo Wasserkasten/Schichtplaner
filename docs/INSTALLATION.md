@@ -188,7 +188,7 @@ Ohne `ADMIN_PASSWORD` erzeugt die App ein zufälliges Passwort und schreibt es i
 
 Alles Folgende geschieht im Browser unter **Verwaltung** (nur für Administratoren sichtbar). Empfohlene Reihenfolge:
 
-> **Erst einmal nur ausprobieren?** Mit [Beispieldaten](#38-beispieldaten-zum-ausprobieren) ist der Plan in einem Klick gefüllt
+> **Erst einmal nur ausprobieren?** Mit [Beispieldaten](#39-beispieldaten-zum-ausprobieren) ist der Plan in einem Klick gefüllt
 > und lässt sich danach genauso schnell wieder leeren.
 
 ### 3.1 Einstellungen
@@ -197,7 +197,7 @@ Alles Folgende geschieht im Browser unter **Verwaltung** (nur für Administrator
 
 | Einstellung | Bedeutung | Empfehlung |
 |---|---|---|
-| Bundesland | bestimmt die angezeigten gesetzlichen Feiertage | Bundesland des Betriebs |
+| Bundesland | Quelle für die gesetzlichen Feiertage (Anpassungen unter *Feiertage*, siehe [3.8](#38-feiertage-und-arbeitsfreie-tage)) | Bundesland des Betriebs – **vor** dem Anpassen der Feiertage einstellen |
 | Recht aller Benutzer auf alle Teams | Grundstufe für jeden angemeldeten Benutzer | **ansehen**: jeder sieht den Gesamtplan; „kein Zugriff“, wenn Teams sich nicht sehen sollen |
 | Recht auf das eigene Team | gilt automatisch für das Team des verknüpften Mitarbeiters | **bearbeiten**: entspricht „jeder Mitarbeiter kann im eigenen Team ändern“ |
 
@@ -258,7 +258,38 @@ festlegen; sie öffnet sich nach der Anmeldung. Administratoren können Ansichte
 - **iPhone/iPad (Safari):** Teilen-Symbol → *Zum Home-Bildschirm*
 - **Windows/macOS (Chrome/Edge):** Installieren-Symbol rechts in der Adressleiste
 
-### 3.8 Beispieldaten zum Ausprobieren
+### 3.8 Feiertage und arbeitsfreie Tage
+
+*Verwaltung → Feiertage*
+
+**Woher kommen die Feiertage?** Die App berechnet die gesetzlichen Feiertage selbst – feste Termine und die beweglichen
+Feiertage über die Osterformel, jeweils passend zum Bundesland aus den *Einstellungen*. Dafür ist keine Internetverbindung nötig.
+Jedes Jahr wird beim ersten Aufruf automatisch damit befüllt; danach gilt, was in dieser Liste steht.
+
+Es gibt zwei Arten von Tagen; beide werden im Plan markiert und im Jahreskalender nicht als Urlaubstag gezählt:
+
+| Art | Farbe im Plan | Beispiele |
+|---|---|---|
+| **Feiertag** | orange | gesetzliche Feiertage |
+| **arbeitsfrei** | grün | betrieblich freie Tage ohne gesetzlichen Status: Heiligabend, Silvester, Rosenmontag, Betriebsruhe |
+
+Möglichkeiten:
+
+- **Aus Quelle übernehmen …** zeigt für das gewählte Jahr alles, was die eingebaute Quelle anbietet, mit Häkchen zum Auswählen:
+  - *Gesetzliche Feiertage* des Bundeslandes (fehlende sind vorausgewählt)
+  - *Regionale Feiertage*, die nur in Teilen gelten, z. B. Mariä Himmelfahrt oder Augsburger Friedensfest in Bayern, Fronleichnam in Teilen Sachsens und Thüringens
+  - *Häufig arbeitsfreie Tage*: Weiberfastnacht, Rosenmontag, Faschingsdienstag, Heiligabend, Silvester – werden als „arbeitsfrei“ übernommen
+
+  Steht am selben Datum schon ein anderer Eintrag, wird er beim Übernehmen ersetzt (der Dialog weist darauf hin).
+- **+ Tag hinzufügen** für eigene Tage, z. B. „Betriebsruhe“ zwischen den Jahren oder einen Betriebsausflug.
+- **Bearbeiten** und **Löschen** für jeden Eintrag. Gelöschte Feiertage kommen nicht von selbst zurück.
+
+Die Liste gilt für alle Abteilungen gemeinsam. Rosenmontag usw. jedes Jahr neu übernehmen, da sich das Datum ändert.
+
+> **Bundesland wechseln:** Die unveränderten gesetzlichen Feiertage werden in allen bereits eingerichteten Jahren durch die des
+> neuen Bundeslandes ersetzt. Eigene, geänderte und arbeitsfreie Tage bleiben erhalten.
+
+### 3.9 Beispieldaten zum Ausprobieren
 
 *Verwaltung → Einstellungen → Beispieldaten → **Beispieldaten einfügen***
 
@@ -728,7 +759,7 @@ Dann <http://localhost:5173> öffnen. Änderungen am Code werden sofort übernom
 | Befehl | Zweck |
 |---|---|
 | `npm run dev` | Entwicklungsmodus mit automatischem Neuladen |
-| `npm run seed` | **leere** Datenbank mit Administrator und Beispieldaten füllen (sonst: [3.8](#38-beispieldaten-zum-ausprobieren)) |
+| `npm run seed` | **leere** Datenbank mit Administrator und Beispieldaten füllen (sonst: [3.9](#39-beispieldaten-zum-ausprobieren)) |
 | `npm test` | automatische Tests |
 | `npm run typecheck` | TypeScript-Prüfung |
 | `npm run build` + `npm start` | Produktionsbuild lokal starten → <http://localhost:3000> |
@@ -793,7 +824,7 @@ Aufruf: Docker `docker compose exec app node server/dist/cli.js <befehl>`, ohne 
 | `list-users` | alle Benutzer anzeigen |
 | `reset-password <benutzer> [passwort]` | Passwort setzen, Benutzer aktivieren, alle Sitzungen beenden |
 | `create-admin <benutzer> [passwort]` | zusätzlichen Administrator anlegen |
-| `demo` | [Beispieldaten](#38-beispieldaten-zum-ausprobieren) einfügen |
+| `demo` | [Beispieldaten](#39-beispieldaten-zum-ausprobieren) einfügen |
 | `demo-remove` | Beispieldaten wieder vollständig entfernen |
 
 ### 9.5 Netzwerk
