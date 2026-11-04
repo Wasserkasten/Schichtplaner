@@ -25,9 +25,13 @@ Konzept, Rechtemodell und Fahrplan: **[docs/KONZEPT.md](docs/KONZEPT.md)** · In
 
 ```bash
 git clone https://github.com/wasserkasten/schichtplaner.git && cd schichtplaner
-cp .env.example .env      # DOMAIN und ADMIN_PASSWORD eintragen
+cp .env.example .env      # ADMIN_PASSWORD und Zugang eintragen (siehe unten)
 docker compose up -d --build
 ```
+
+Zugang aus dem Internet wahlweise über **Caddy** (Ports 80/443, `DOMAIN` setzen) oder **Cloudflare Tunnel**
+(keine offenen Ports, `COMPOSE_PROFILES=cloudflare` und `CLOUDFLARE_TUNNEL_TOKEN` setzen). Ist Port 3000 auf dem Server
+schon belegt: `APP_BIND=127.0.0.1:3001` in `.env`.
 
 **Zum Ausprobieren und Entwickeln: npm** (Node.js 22):
 

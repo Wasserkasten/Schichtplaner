@@ -31,6 +31,7 @@ export default defineConfig({
   ],
   server: {
     port: 5173,
-    proxy: { '/api': { target: 'http://localhost:3000', changeOrigin: false } },
+    // API-Port wie beim Server über PORT änderbar, z. B.: PORT=3001 npm run dev
+    proxy: { '/api': { target: `http://localhost:${process.env.PORT ?? 3000}`, changeOrigin: false } },
   },
 });

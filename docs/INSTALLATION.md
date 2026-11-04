@@ -5,7 +5,7 @@
 | | **Docker** (empfohlen für den Betrieb) | **npm** |
 |---|---|---|
 | Wofür | dauerhafter, öffentlich erreichbarer Betrieb | Ausprobieren, Entwicklung, oder wenn Docker nicht erlaubt ist |
-| HTTPS | automatisch (Caddy ist dabei) | selbst einrichten (Caddy/nginx) |
+| HTTPS | automatisch (Caddy **oder** Cloudflare Tunnel ist dabei) | selbst einrichten (Caddy/nginx/cloudflared) |
 | Neustart nach Absturz/Reboot | automatisch | selbst einrichten (systemd) |
 | Backups | automatisch täglich | automatisch, wenn `BACKUP_DIR` gesetzt ist |
 | Updates | `git pull` + ein Befehl | `git pull` + Build + Neustart |
@@ -14,18 +14,32 @@
 **Empfehlung: Docker** auf einem kleinen Linux-Server. Ein einziger Befehl startet App und HTTPS-Proxy, Neustarts und Backups laufen automatisch, und
 der Server bleibt sauber, weil alles im Container steckt. Mit **npm** probierst du die App auf dem eigenen PC aus und entwickelst sie weiter.
 
+**Zugang aus dem Internet** – eine der beiden mitgelieferten Varianten wählen:
+
+| | **Cloudflare Tunnel** | **Caddy** |
+|---|---|---|
+| Geeignet, wenn … | die Domain bei Cloudflare liegt bzw. Cloudflare Tunnel ohnehin genutzt wird | Cloudflare nicht genutzt werden soll |
+| Offene Ports am Server/Router | **keine** | 80 und 443 |
+| Funktioniert auch zu Hause hinter einem Router ohne feste IP | ja | nur mit Portfreigabe und DynDNS |
+| HTTPS-Zertifikat | macht Cloudflare | holt Caddy automatisch |
+| Einrichtung | Tunnel im Cloudflare-Dashboard anlegen, Token in `.env` | Domain in `.env`, DNS-Eintrag setzen |
+| Anleitung | [Kapitel 5](#5-variante-cloudflare-tunnel) | [Kapitel 2](#2-installation-mit-docker-empfohlen) (Standard) |
+
+Den **Port** der App (Standard 3000) änderst du in `.env` mit `APP_BIND`, siehe [Port ändern](#port-ändern).
+
 Inhalt:
 
 1. [Voraussetzungen](#1-voraussetzungen)
 2. [Installation mit Docker (empfohlen)](#2-installation-mit-docker-empfohlen)
 3. [Ersteinrichtung in der App](#3-ersteinrichtung-in-der-app)
 4. [Betrieb: Updates, Backups, Passwort vergessen](#4-betrieb)
-5. [Variante: bereits vorhandener Reverse-Proxy](#5-variante-bereits-vorhandener-reverse-proxy-nginx-traefik)
-6. [Installation ohne Docker (npm + systemd)](#6-installation-ohne-docker-npm--systemd)
-7. [Lokal ausprobieren / entwickeln](#7-lokal-ausprobieren--entwickeln)
-8. [Referenz: alle Einstellungen](#8-referenz)
-9. [Fehlerbehebung](#9-fehlerbehebung)
-10. [Sicherheits-Checkliste](#10-sicherheits-checkliste)
+5. [Variante: Cloudflare Tunnel (statt Caddy)](#5-variante-cloudflare-tunnel)
+6. [Variante: bereits vorhandener Reverse-Proxy](#6-variante-bereits-vorhandener-reverse-proxy-nginx-traefik)
+7. [Installation ohne Docker (npm + systemd)](#7-installation-ohne-docker-npm--systemd)
+8. [Lokal ausprobieren / entwickeln](#8-lokal-ausprobieren--entwickeln)
+9. [Referenz: alle Einstellungen](#9-referenz)
+10. [Fehlerbehebung](#10-fehlerbehebung)
+11. [Sicherheits-Checkliste](#11-sicherheits-checkliste)
 
 ---
 
@@ -35,11 +49,13 @@ Inhalt:
 - Linux-Server (VPS) mit **Debian 12** oder **Ubuntu 22.04/24.04**, x64 oder ARM64
 - Ressourcen: 1 vCPU, 1–2 GB RAM und 10 GB Speicher reichen für einige Hundert Benutzer
 - Standort in der EU (Datenschutz, siehe [Konzept, Kapitel 7](KONZEPT.md#7-wichtig-vor-einem-echten-einsatz)), z. B. bei Hetzner, netcup oder IONOS
-- Ports **80** und **443** müssen aus dem Internet erreichbar sein (für HTTPS-Zertifikate und Zugriff)
+- Mit **Caddy**: Ports **80** und **443** müssen aus dem Internet erreichbar sein (für HTTPS-Zertifikate und Zugriff)
+- Mit **Cloudflare Tunnel**: keine offenen Ports nötig; der Server muss nur selbst ins Internet kommen
 
 **Domain**
 - Eine (Sub-)Domain, z. B. `plan.example.de`
-- Beim Domain-Anbieter einen **A-Eintrag** (IPv4) und, wenn vorhanden, einen **AAAA-Eintrag** (IPv6) auf die IP des Servers setzen
+- Mit **Cloudflare Tunnel**: Die Domain wird bei Cloudflare verwaltet; den DNS-Eintrag legt Cloudflare selbst an, die beiden folgenden Punkte entfallen
+- Mit **Caddy**: beim Domain-Anbieter einen **A-Eintrag** (IPv4) und, wenn vorhanden, einen **AAAA-Eintrag** (IPv6) auf die IP des Servers setzen
 - Prüfen (vom eigenen PC): `nslookup plan.example.de` muss die Server-IP liefern
 
 **Zugang**
@@ -64,8 +80,10 @@ sudo ufw allow 443/udp      # HTTP/3, optional
 sudo ufw enable
 ```
 
-> Hinweis: Docker veröffentlichte Ports an `ufw` vorbei. Deshalb lauscht die App in der mitgelieferten Konfiguration
-> nur auf `127.0.0.1:3000`; nach außen erreichbar ist nur Caddy auf 80/443.
+Mit **Cloudflare Tunnel** die drei Zeilen für 80/443 weglassen; dann ist außer SSH nichts offen.
+
+> Hinweis: Docker veröffentlicht Ports an `ufw` vorbei. Deshalb lauscht die App in der mitgelieferten Konfiguration
+> nur auf `127.0.0.1` und ist damit aus dem Internet nicht direkt erreichbar. Von außen erreichbar ist nur Caddy auf 80/443 – mit Cloudflare Tunnel gar nichts.
 
 ### 2.2 Docker installieren
 
@@ -98,14 +116,36 @@ cp .env.example .env
 nano .env
 ```
 
-Mindestens diese Werte anpassen:
+Mindestens diese Werte anpassen – **mit Caddy**:
 
 ```ini
-DOMAIN=plan.example.de          # deine Domain (DNS muss schon auf den Server zeigen)
 ADMIN_PASSWORD=EinLangesStartPasswort   # nur beim allerersten Start; danach in der App ändern
+COMPOSE_PROFILES=caddy
+DOMAIN=plan.example.de                  # deine Domain (DNS muss schon auf den Server zeigen)
 ```
 
-Alle weiteren Werte haben sinnvolle Vorgaben (siehe [Referenz](#8-referenz)). Danach die Datei schützen:
+**Mit Cloudflare Tunnel** stattdessen `COMPOSE_PROFILES=cloudflare` und `CLOUDFLARE_TUNNEL_TOKEN=…`. Wie du an das Token kommst,
+steht in [Kapitel 5](#5-variante-cloudflare-tunnel).
+
+#### Port ändern
+
+Die App belegt auf dem Server standardmäßig Port **3000**. Läuft dort schon etwas anderes (z. B. Dockhand, Grafana oder eine
+andere Web-App), bricht `docker compose up` mit `port is already allocated` ab. Dann in `.env` einen freien Port eintragen:
+
+```ini
+APP_BIND=127.0.0.1:3001
+```
+
+- Die Zahl hinter dem Doppelpunkt ist der Port auf dem Server; jeder freie Port geht (z. B. `3001` oder `8080`).
+- `127.0.0.1` heißt: nur vom Server selbst erreichbar. Das ist richtig für Caddy und Cloudflare Tunnel und verhindert, dass
+  jemand am Proxy vorbei direkt auf die App zugreift.
+- **Innerhalb von Docker bleibt die App immer auf Port 3000.** Caddy und der mitgelieferte cloudflared sprechen sie über
+  `http://schichtplaner:3000` an; daran ändert `APP_BIND` nichts, dort ist also nichts weiter anzupassen.
+- Welche Ports schon belegt sind, zeigt `sudo ss -tlnp` (Spalte *Local Address*).
+
+Nach einer Änderung: `docker compose up -d`.
+
+Alle weiteren Werte haben sinnvolle Vorgaben (siehe [Referenz](#9-referenz)). Danach die Datei schützen:
 
 ```bash
 chmod 600 .env
@@ -121,13 +161,14 @@ Beim ersten Mal dauert das einige Minuten, weil das Image gebaut wird. Danach pr
 
 ```bash
 docker compose ps
-# app    … Up … (healthy)
-# caddy  … Up …
+# app          … Up … (healthy)
+# caddy        … Up …        (bzw. cloudflared … Up … bei Cloudflare Tunnel)
 
 docker compose logs app | grep "Erster Start"
 # === Erster Start: Benutzer "admin" angelegt, Passwort: (aus ADMIN_PASSWORD) ===
 
-docker compose logs caddy | grep -i "certificate obtained"
+docker compose logs caddy | grep -i "certificate obtained"                 # nur bei Caddy
+docker compose logs cloudflared | grep -i "registered tunnel connection"   # nur bei Cloudflare
 ```
 
 Ohne `ADMIN_PASSWORD` erzeugt die App ein zufälliges Passwort und schreibt es in die Logs (`docker compose logs app`).
@@ -225,7 +266,7 @@ Alle Befehle im Verzeichnis `/opt/schichtplaner` ausführen.
 ```bash
 docker compose ps                    # läuft alles? app sollte "(healthy)" zeigen
 docker compose logs -f app           # Logs der App live ansehen (Strg+C beendet)
-docker compose logs --since 1h caddy # HTTPS/Proxy-Logs der letzten Stunde
+docker compose logs --since 1h caddy # Proxy-Logs der letzten Stunde (bzw. cloudflared)
 docker compose restart app           # App neu starten
 docker compose down                  # alles stoppen (Daten bleiben erhalten)
 docker compose up -d                 # wieder starten
@@ -244,10 +285,10 @@ docker image prune -f                # alte Images aufräumen
 Die Datenbank wird beim Start automatisch auf das neue Schema gebracht. Die Unterbrechung dauert nur wenige Sekunden;
 offene Browser verbinden sich selbst neu (der Punkt oben rechts ist kurz rot, dann wieder grün).
 
-Docker-Images (Node, Caddy) gelegentlich aktualisieren:
+Docker-Images (Node, Caddy bzw. cloudflared) gelegentlich aktualisieren:
 
 ```bash
-docker compose pull caddy && docker compose build --pull app && docker compose up -d
+docker compose pull --ignore-buildable && docker compose build --pull app && docker compose up -d
 ```
 
 ### 4.3 Backups
@@ -317,9 +358,158 @@ Nach zu vielen Fehlversuchen ist eine Anmeldung 5 Minuten gesperrt; `docker comp
 
 > Achtung: `docker compose down -v` löscht die Volumes und damit **alle Daten**. Nur `docker compose down` verwenden.
 
+**Variante wechseln** (z. B. von Caddy zu Cloudflare): erst `docker compose --profile "*" down`, dann `COMPOSE_PROFILES` in `.env`
+ändern und `docker compose up -d`. Ohne `--profile "*"` bliebe der alte Caddy- bzw. cloudflared-Container stehen.
+
 ---
 
-## 5. Variante: bereits vorhandener Reverse-Proxy (nginx, Traefik, …)
+## 5. Variante: Cloudflare Tunnel
+
+Mit Cloudflare Tunnel brauchst du **keinen Caddy und keine offenen Ports**. Ein kleines Programm (`cloudflared`) baut von deinem Server
+aus eine Verbindung zu Cloudflare auf; Cloudflare stellt die Seite unter deiner Domain per HTTPS bereit und leitet die Anfragen durch
+den Tunnel an die App. Das funktioniert auch auf einem Rechner zu Hause hinter einem Router.
+
+```
+Browser ──HTTPS──► Cloudflare ◄──Tunnel (ausgehend)── cloudflared ──► schichtplaner:3000
+```
+
+Es gibt zwei Wege:
+
+| | **A: eigener Tunnel** (empfohlen) | **B: vorhandenen Tunnel mitnutzen** |
+|---|---|---|
+| Was läuft | ein zusätzlicher cloudflared-Container, den diese Installation mitbringt | dein bereits laufender cloudflared |
+| Aufwand | Tunnel im Dashboard anlegen, Token in `.env` | Route im vorhandenen Tunnel ergänzen, ggf. Container ins Docker-Netz aufnehmen |
+| Unabhängigkeit | Schichtplaner und deine anderen Dienste beeinflussen sich nicht | Updates/Neustarts des gemeinsamen cloudflared betreffen alle Dienste |
+
+> **Wichtig:** Dasselbe Tunnel-Token **nicht** für einen zweiten cloudflared verwenden. Cloudflare verteilt die Anfragen dann auf beide
+> Container; jeder müsste alle Dienste erreichen, sonst gibt es sporadisch Fehler 502. Für Weg A also einen **neuen** Tunnel anlegen.
+
+Die Bezeichnungen im Cloudflare-Dashboard ändern sich gelegentlich ein wenig; die Abläufe bleiben gleich.
+
+### 5.1 Voraussetzungen
+
+- Cloudflare-Konto, die Domain (z. B. `example.de`) wird bei Cloudflare verwaltet
+- Zero Trust ist aktiviert (der kostenlose Tarif genügt); wenn du schon Tunnel nutzt, ist das erledigt
+- Docker ist installiert und Schichtplaner heruntergeladen ([2.1](#21-server-vorbereiten) bis [2.3](#23-schichtplaner-herunterladen);
+  die Firewall-Freigaben für 80/443 entfallen)
+
+### 5.2 Variante A: eigener Tunnel (empfohlen)
+
+**1. Tunnel anlegen**
+
+1. <https://one.dash.cloudflare.com> öffnen → **Networks** → **Tunnels** → **Create a tunnel**
+2. Typ **Cloudflared** wählen, Name z. B. `schichtplaner`, speichern
+3. Auf der Seite *Install and run connectors* **Docker** auswählen. Angezeigt wird ein Befehl wie
+   `docker run cloudflare/cloudflared:latest tunnel --no-autoupdate run --token eyJhIjoi…`.
+   **Den Befehl nicht ausführen**, sondern nur den langen Teil hinter `--token` kopieren (beginnt mit `eyJ`).
+4. **Next** → Route anlegen (je nach Dashboard-Version *Public Hostname* oder *Published application*):
+
+   | Feld | Wert |
+   |---|---|
+   | Subdomain | `plan` |
+   | Domain | `example.de` |
+   | Path | leer lassen |
+   | Service → Type | `HTTP` |
+   | Service → URL | `schichtplaner:3000` |
+
+   Speichern. Den DNS-Eintrag für `plan.example.de` legt Cloudflare selbst an.
+
+**2. `.env` einstellen**
+
+```bash
+cd /opt/schichtplaner
+cp .env.example .env
+nano .env
+```
+
+```ini
+ADMIN_PASSWORD=EinLangesStartPasswort
+COMPOSE_PROFILES=cloudflare
+CLOUDFLARE_TUNNEL_TOKEN=eyJhIjoi…            # das kopierte Token, komplett in einer Zeile
+APP_BIND=127.0.0.1:3001                      # nur nötig, wenn Port 3000 schon belegt ist (z. B. Dockhand)
+```
+
+`DOMAIN` wird bei dieser Variante nicht gebraucht. Danach `chmod 600 .env` (das Token ist ein Passwort).
+
+**3. Starten und prüfen**
+
+```bash
+docker compose up -d --build
+docker compose ps                       # app (healthy), cloudflared Up
+docker compose logs cloudflared | grep -i "registered tunnel connection"
+```
+
+Im Cloudflare-Dashboard steht der Tunnel jetzt auf **Healthy**. `https://plan.example.de` öffnen und weiter mit der
+[ersten Anmeldung](#26-erste-anmeldung).
+
+> `APP_BIND` hat mit dem Tunnel nichts zu tun – cloudflared spricht die App im Docker-Netz direkt an (`schichtplaner:3000`).
+> Der Port auf dem Server ist nur noch für dich da, z. B. für `curl http://127.0.0.1:3001/api/health` auf dem Server selbst.
+
+### 5.3 Variante B: vorhandenen Tunnel nutzen
+
+**1. In `.env` nur die App starten:**
+
+```ini
+ADMIN_PASSWORD=EinLangesStartPasswort
+COMPOSE_PROFILES=
+APP_BIND=127.0.0.1:3001        # freier Port, falls 3000 belegt ist
+```
+
+```bash
+docker compose up -d --build
+```
+
+**2. Route im vorhandenen Tunnel ergänzen:** Dashboard → **Networks** → **Tunnels** → deinen Tunnel → **Edit** → Reiter
+*Public Hostname* bzw. *Published application routes* → **Add**: Subdomain `plan`, Domain `example.de`, Type `HTTP`, URL je nachdem,
+wie dein cloudflared läuft:
+
+| Dein cloudflared läuft … | Service-URL | Zusätzlich nötig |
+|---|---|---|
+| als **Docker-Container** (z. B. über Dockhand gestartet) | `schichtplaner:3000` | Container in das Netz `schichtplaner` aufnehmen (siehe unten) |
+| **direkt auf dem Server** (installiert per `cloudflared service install`) oder als Container mit `network_mode: host` | `localhost:3001` (Port aus `APP_BIND`) | – |
+| auf einem **anderen Rechner** im Netzwerk | `<IP-des-Servers>:3001` | `APP_BIND=0.0.0.0:3001` setzen und den Port per Firewall auf diesen Rechner beschränken |
+
+**3. Nur bei cloudflared als Docker-Container:** Er muss die App über das Docker-Netz `schichtplaner` erreichen können.
+
+```bash
+docker ps --filter ancestor=cloudflare/cloudflared --format '{{.Names}}'   # Namen deines Containers herausfinden
+docker network connect schichtplaner <name-des-containers>
+```
+
+Das hält über Neustarts hinweg, aber **nicht**, wenn der cloudflared-Container neu erstellt wird (z. B. bei einem Image-Update).
+Dauerhaft geht es in der Compose-Datei deines cloudflared (bzw. in der Stack-Konfiguration in Dockhand):
+
+```yaml
+services:
+  cloudflared:
+    # … deine bisherige Konfiguration …
+    networks: [default, schichtplaner]
+
+networks:
+  schichtplaner:
+    external: true      # das Netz legt die Schichtplaner-Installation an – sie muss daher zuerst laufen
+```
+
+Läuft dein cloudflared mit `network_mode: host`, ist dieser Schritt nicht nötig (siehe Tabelle).
+
+### 5.4 Cloudflare-Einstellungen und Hinweise
+
+- **HTTPS erzwingen:** Dashboard der Domain → *SSL/TLS* → *Edge Certificates* → **Always Use HTTPS** einschalten.
+- **Live-Aktualisierung** funktioniert über den Tunnel. Die App sendet alle 25 Sekunden ein Lebenszeichen, damit Cloudflare die
+  Verbindung nicht nach 100 Sekunden trennt.
+- **Caching:** Cloudflare speichert nur Dateien wie JavaScript und CSS zwischen, keine Plandaten (`/api/…`). Keine Cache-Regeln wie
+  *Cache Everything* für diese Domain anlegen.
+- **Rocket Loader** (*Speed* → *Optimization*): Bleibt die Seite nach dem Aufruf leer, für diese Domain ausschalten.
+- **Echte IP-Adressen:** cloudflared übergibt die Adresse des Besuchers; `TRUST_PROXY=true` (Standard) bleibt deshalb richtig.
+- **Optional: Cloudflare Access** kann vor die App eine zusätzliche Anmeldung legen (z. B. Code per E-Mail an Firmenadressen). Das
+  erhöht die Sicherheit, bedeutet aber zwei Anmeldungen. Mit dieser App nicht getestet.
+- **Datenschutz:** Cloudflare entschlüsselt den Datenverkehr auf seinen Servern und sieht damit die Plandaten im Klartext, auch
+  Krankmeldungen. Cloudflare bietet einen Auftragsverarbeitungsvertrag (DPA) an; ob diese Variante beim Arbeitgeber in Ordnung ist,
+  gehört zur Freigabe durch Datenschutz und IT ([Konzept, Kapitel 7](KONZEPT.md#7-wichtig-vor-einem-echten-einsatz)).
+
+---
+
+## 6. Variante: bereits vorhandener Reverse-Proxy (nginx, Traefik)
 
 Wenn auf dem Server schon ein Proxy läuft, der HTTPS übernimmt, den mitgelieferten Caddy abschalten. In `.env`:
 
@@ -357,19 +547,19 @@ server {
 }
 ```
 
-**Traefik**: Router auf den Dienst `app`, Port 3000; Traefik reicht Server-Sent Events ohne weitere Einstellungen durch.
+**Traefik** (als Container): dem Docker-Netz `schichtplaner` beitreten, Ziel `http://schichtplaner:3000`; Traefik reicht Server-Sent Events ohne weitere Einstellungen durch.
 
 Der Proxy muss `X-Forwarded-For` setzen (`TRUST_PROXY=true`, Standard). Nur so sieht die App die echte IP, die die Sperre bei
 Fehlversuchen beim Anmelden braucht.
 
 ---
 
-## 6. Installation ohne Docker (npm + systemd)
+## 7. Installation ohne Docker (npm + systemd)
 
 Für Server, auf denen Docker nicht erlaubt ist. Getestet unter Debian/Ubuntu; Windows Server funktioniert grundsätzlich ebenfalls, die
 Dienst-Einrichtung (z. B. mit NSSM) ist hier aber nicht beschrieben.
 
-### 6.1 Node.js 22 installieren
+### 7.1 Node.js 22 installieren
 
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
@@ -377,7 +567,7 @@ sudo apt install -y nodejs git
 node -v    # v22.x
 ```
 
-### 6.2 Eigener Systembenutzer, Code und Build
+### 7.2 Eigener Systembenutzer, Code und Build
 
 ```bash
 sudo useradd --system --create-home --home-dir /opt/schichtplaner --shell /usr/sbin/nologin schichtplaner
@@ -388,7 +578,7 @@ sudo -u schichtplaner npm run build
 sudo -u schichtplaner mkdir -p /opt/schichtplaner/data /opt/schichtplaner/backups
 ```
 
-### 6.3 Konfiguration
+### 7.3 Konfiguration
 
 `/etc/schichtplaner.env` anlegen (`sudo nano /etc/schichtplaner.env`, danach `sudo chmod 600 /etc/schichtplaner.env`):
 
@@ -404,7 +594,7 @@ SECURE_COOKIES=true
 ADMIN_PASSWORD=EinLangesStartPasswort
 ```
 
-### 6.4 systemd-Dienst
+### 7.4 systemd-Dienst
 
 `/etc/systemd/system/schichtplaner.service`:
 
@@ -435,7 +625,7 @@ sudo systemctl status schichtplaner
 journalctl -u schichtplaner -f        # Logs
 ```
 
-### 6.5 HTTPS mit Caddy
+### 7.5 HTTPS mit Caddy
 
 ```bash
 sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
@@ -456,9 +646,10 @@ plan.example.de {
 sudo systemctl reload caddy
 ```
 
-Alternativ nginx + certbot mit der Konfiguration aus [Kapitel 5](#5-variante-bereits-vorhandener-reverse-proxy-nginx-traefik).
+Alternativ nginx + certbot mit der Konfiguration aus [Kapitel 6](#6-variante-bereits-vorhandener-reverse-proxy-nginx-traefik),
+oder **Cloudflare Tunnel** mit cloudflared direkt auf dem Server: Route wie in [5.3](#53-variante-b-vorhandenen-tunnel-nutzen), Service-URL `localhost:3000`.
 
-### 6.6 Betrieb ohne Docker
+### 7.6 Betrieb ohne Docker
 
 ```bash
 # Update
@@ -481,7 +672,7 @@ sudo systemctl start schichtplaner
 
 ---
 
-## 7. Lokal ausprobieren / entwickeln
+## 8. Lokal ausprobieren / entwickeln
 
 Voraussetzung: [Node.js 22](https://nodejs.org/) (Windows, macOS oder Linux) und Git.
 
@@ -492,6 +683,9 @@ npm ci
 npm run seed      # optional: Demodaten, Logins admin / anna / ben, Passwort "demo1234"
 npm run dev       # startet API (Port 3000) und Oberfläche (Port 5173)
 ```
+
+Ist Port 3000 auf deinem Rechner belegt (z. B. durch Dockhand): `PORT=3001 npm run dev` (Windows PowerShell:
+`$env:PORT=3001; npm run dev`). Die Oberfläche bleibt unter <http://localhost:5173> und leitet automatisch an den geänderten Port weiter.
 
 Dann <http://localhost:5173> öffnen. Änderungen am Code werden sofort übernommen.
 
@@ -518,13 +712,13 @@ ADMIN_PASSWORD=test1234
 
 ---
 
-## 8. Referenz
+## 9. Referenz
 
-### 8.1 Umgebungsvariablen der App
+### 9.1 Umgebungsvariablen der App
 
 | Variable | Bedeutung | Standard |
 |---|---|---|
-| `PORT` | HTTP-Port der App | `3000` |
+| `PORT` | HTTP-Port der App. Unter Docker **nicht** ändern, dort `APP_BIND` verwenden | `3000` |
 | `HOST` | Netzwerkadresse, auf der die App lauscht | `0.0.0.0` |
 | `DB_FILE` | Pfad der SQLite-Datenbank | `server/data/schichtplaner.db` (Docker: `/data/schichtplaner.db`) |
 | `STATIC_DIR` | Verzeichnis der gebauten Oberfläche | `web/dist` |
@@ -535,20 +729,23 @@ ADMIN_PASSWORD=test1234
 | `BACKUP_KEEP` | Anzahl aufbewahrter automatischer Sicherungen | `14` |
 | `TZ` | Zeitzone für Logs und Zeitstempel der Sicherungsdateien | Systemzeit (Docker: `Europe/Berlin`) |
 
-### 8.2 Zusätzliche Werte in `.env` (nur Docker Compose)
+### 9.2 Zusätzliche Werte in `.env` (nur Docker Compose)
 
 | Variable | Bedeutung | Standard |
 |---|---|---|
-| `DOMAIN` | Domain, für die Caddy das HTTPS-Zertifikat holt | `localhost` |
-| `COMPOSE_PROFILES` | `caddy` = mitgelieferten HTTPS-Proxy starten; leer = nur die App | `caddy` |
-| `APP_BIND` | Adresse:Port, unter der die App auf dem Server erreichbar ist | `127.0.0.1:3000` |
+| `COMPOSE_PROFILES` | `caddy` = mitgelieferten HTTPS-Proxy starten · `cloudflare` = mitgelieferten Cloudflare Tunnel starten · leer = nur die App | `caddy` |
+| `DOMAIN` | nur Caddy: Domain, für die das HTTPS-Zertifikat geholt wird | `localhost` |
+| `CLOUDFLARE_TUNNEL_TOKEN` | nur Cloudflare: Token des Tunnels | leer |
+| `APP_BIND` | Adresse:Port, unter der die App **auf dem Server** erreichbar ist; hier den Port ändern, wenn 3000 belegt ist | `127.0.0.1:3000` |
 
-### 8.3 Einstellungen in der App
+Innerhalb des Docker-Netzes `schichtplaner` ist die App unabhängig von `APP_BIND` immer unter `http://schichtplaner:3000` erreichbar.
+
+### 9.3 Einstellungen in der App
 
 *Verwaltung → Einstellungen*: Bundesland, Grundrecht für alle, Recht auf das eigene Team (siehe [3.1](#31-einstellungen)).
 Die Einstellungen stehen in der Datenbank und sind damit Teil jeder Sicherung.
 
-### 8.4 Kommandozeilenwerkzeug
+### 9.4 Kommandozeilenwerkzeug
 
 Aufruf: Docker `docker compose exec app node server/dist/cli.js <befehl>`, ohne Docker `node server/dist/cli.js <befehl>`
 (mit gesetztem `DB_FILE`).
@@ -561,40 +758,46 @@ Aufruf: Docker `docker compose exec app node server/dist/cli.js <befehl>`, ohne 
 | `reset-password <benutzer> [passwort]` | Passwort setzen, Benutzer aktivieren, alle Sitzungen beenden |
 | `create-admin <benutzer> [passwort]` | zusätzlichen Administrator anlegen |
 
-### 8.5 Netzwerk
+### 9.5 Netzwerk
 
 | Port | Dienst | von außen erreichbar? |
 |---|---|---|
-| 80/tcp | Caddy (Umleitung auf HTTPS, Zertifikatsprüfung) | ja |
-| 443/tcp+udp | Caddy (HTTPS, HTTP/3) | ja |
-| 3000/tcp | App | nein (nur `127.0.0.1`) |
+| 80/tcp | Caddy (Umleitung auf HTTPS, Zertifikatsprüfung) | ja – nur bei Caddy |
+| 443/tcp+udp | Caddy (HTTPS, HTTP/3) | ja – nur bei Caddy |
+| 3000/tcp (änderbar mit `APP_BIND`) | App | nein (nur `127.0.0.1`) |
+| – | cloudflared: nur **ausgehende** Verbindungen zu Cloudflare | keine eingehenden Ports |
 
 Health-Check für Monitoring (z. B. Uptime Kuma): `https://plan.example.de/api/health` liefert `{"ok":true}`.
 
 ---
 
-## 9. Fehlerbehebung
+## 10. Fehlerbehebung
 
 | Problem | Ursache / Lösung |
 |---|---|
 | Browser meldet Zertifikatsfehler, Caddy-Log zeigt `challenge failed` | DNS zeigt noch nicht auf den Server, oder Port 80/443 ist gesperrt (Firewall, auch die des Hosters). `nslookup`, `sudo ufw status` und `docker compose logs caddy` prüfen |
 | Anmeldung scheint zu klappen, man landet aber wieder beim Login | Zugriff über `http://` bei `SECURE_COOKIES=true`. Über `https://` aufrufen, oder für reine Tests `SECURE_COOKIES=false` setzen |
-| Punkt oben rechts bleibt rot, Änderungen anderer erscheinen erst nach Neuladen | Ein Proxy puffert `/api/events`. Bei nginx `proxy_buffering off` setzen (siehe [Kapitel 5](#5-variante-bereits-vorhandener-reverse-proxy-nginx-traefik)) |
+| Punkt oben rechts bleibt rot, Änderungen anderer erscheinen erst nach Neuladen | Ein Proxy puffert `/api/events`. Bei nginx `proxy_buffering off` setzen (siehe [Kapitel 6](#6-variante-bereits-vorhandener-reverse-proxy-nginx-traefik)) |
 | „Zu viele Fehlversuche“ | 5 Minuten warten oder `docker compose restart app` |
 | Admin-Passwort vergessen | [4.4](#44-passwort-vergessen--ausgesperrt) |
-| `docker compose up` meldet `port is already allocated` | Port 80/443 ist schon belegt (z. B. Apache/nginx). Den Dienst beenden oder [Kapitel 5](#5-variante-bereits-vorhandener-reverse-proxy-nginx-traefik) nutzen |
+| `docker compose up` meldet `Bind for 0.0.0.0:3000 failed: port is already allocated` | Port 3000 ist schon belegt (z. B. durch Dockhand). In `.env` `APP_BIND=127.0.0.1:3001` setzen, siehe [Port ändern](#port-ändern) |
+| `docker compose up` meldet `port is already allocated` für Port 80 oder 443 | Port 80/443 ist schon belegt (z. B. Apache/nginx). Den Dienst beenden, [Cloudflare Tunnel](#5-variante-cloudflare-tunnel) nutzen oder [Kapitel 6](#6-variante-bereits-vorhandener-reverse-proxy-nginx-traefik) |
+| cloudflared startet ständig neu, Log: `Provided Tunnel token is not valid` | `CLOUDFLARE_TUNNEL_TOKEN` fehlt oder ist unvollständig kopiert (es ist sehr lang und beginnt mit `eyJ`) |
+| Cloudflare zeigt **Error 502 / Bad Gateway** | Der Tunnel läuft, erreicht aber die App nicht. In der Route muss Type `HTTP` und URL `schichtplaner:3000` stehen (nicht `https`, nicht `localhost`). Bei einem vorhandenen cloudflared-Container prüfen, ob er im Netz `schichtplaner` ist ([5.3](#53-variante-b-vorhandenen-tunnel-nutzen)) |
+| Cloudflare zeigt **Error 1033** | Für diese Domain ist kein laufender Tunnel verbunden: `docker compose logs cloudflared` prüfen |
+| Cloudflare-Fehler 502 **nur manchmal** | Dasselbe Tunnel-Token läuft in zwei cloudflared-Containern; für Schichtplaner einen eigenen Tunnel anlegen ([Kapitel 5](#5-variante-cloudflare-tunnel)) |
 | `app` ist `unhealthy` | `docker compose logs app` lesen; häufig ist der Speicher voll (`df -h`) |
 | Nach einem Update fehlen neue Funktionen im Browser | Die App aktualisiert sich als PWA beim nächsten Laden selbst; notfalls einmal Strg+F5 |
 | `npm ci` meldet `node-gyp`/Python-Fehler | Die Projektdatei `.npmrc` (mit `ignore-scripts=true`) fehlt oder wird übergangen. Sie muss im Projektordner liegen; die benötigten Binärdateien bringt `better-sqlite3` für Linux, macOS und Windows (x64/ARM64) mit. Auf anderen Plattformen (z. B. 32-Bit-ARM) muss es mit `npm rebuild better-sqlite3 --ignore-scripts=false` kompiliert werden (braucht Python und C++-Compiler) |
 
 ---
 
-## 10. Sicherheits-Checkliste
+## 11. Sicherheits-Checkliste
 
-- [ ] Zugriff nur über **HTTPS**, `SECURE_COOKIES=true`
+- [ ] Zugriff nur über **HTTPS**, `SECURE_COOKIES=true` (bei Cloudflare zusätzlich *Always Use HTTPS*)
 - [ ] Startpasswort des `admin` geändert, `ADMIN_PASSWORD` aus `.env` entfernt
 - [ ] Mindestens zwei Administratoren, aber nicht mehr als nötig
-- [ ] Firewall aktiv, nur 22/80/443 offen; SSH nur mit Schlüssel (`PasswordAuthentication no`)
+- [ ] Firewall aktiv, nur 22/80/443 offen (bei Cloudflare Tunnel nur 22); SSH nur mit Schlüssel (`PasswordAuthentication no`)
 - [ ] Automatische Sicherheitsupdates des Servers (`sudo apt install unattended-upgrades`)
 - [ ] Backups werden regelmäßig **vom Server weg** kopiert, und eine Wiederherstellung wurde einmal ausprobiert
 - [ ] Ausgeschiedene Mitarbeiter: Benutzer auf *inaktiv*, Mitarbeiter auf *inaktiv*
