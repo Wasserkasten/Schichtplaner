@@ -11,6 +11,8 @@ export interface UserRow {
   active: number;
   must_change_password: number;
   font_scale: number;
+  seen_version: string | null;
+  ack_version: string | null;
 }
 
 const SESSION_DAYS = 30;

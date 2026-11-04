@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { get } from '../api';
+import { get, post } from '../api';
 import { reportError } from '../helpers';
 
 /** Sehr kleiner Markdown-Renderer für CHANGELOG.md (Überschriften, Listen, Absätze, **fett**, `Code`, *kursiv*, [Links](…)). */
@@ -59,20 +59,23 @@ export function Markdown({ source }: { source: string }) {
   return <div className="markdown">{blocks}</div>;
 }
 
+interface Changelog {
+  version: string;
+  markdown: string;
+  acknowledgements: { version: string; total: number; acknowledged: number; missing: string[] } | null;
+}
+
 /** Verwaltung → Info: installierte Version und Änderungen je Version. */
 export function InfoView() {
-  const [data, setData] = useState<{ version: string; markdown: string } | null>(null);
+  const [data, setData] = useState<Changelog | null>(null);
   useEffect(() => {
-    get<{ version: string; markdown: string }>('/api/admin/changelog').then((d) => {
+    get<Changelog>('/api/admin/changelog').then((d) => {
       setData(d);
-      try {
-        localStorage.setItem('sp-seen-version', d.version);
-      } catch {
-        /* egal */
-      }
+      post('/api/news/seen').catch(() => {});
       window.dispatchEvent(new CustomEvent('sp-version-seen', { detail: d.version })); // Update-Hinweis ausblenden
     }, reportError);
   }, []);
+  const ack = data?.acknowledgements;
   if (!data) return <p className="muted">Lade …</p>;
   return (
     <div className="info">
@@ -80,6 +83,20 @@ export function InfoView() {
         <div className="muted small">Installierte Version</div>
         <div className="version">Schichtplaner {data.version}</div>
       </div>
+      {ack && (
+        <div className="card narrow">
+          <div className="muted small">Wichtiger Hinweis zu Version {ack.version}</div>
+          <div>
+            <strong>{ack.acknowledged}</strong> von {ack.total} aktiven Benutzern haben „Verstanden“ bestätigt.
+          </div>
+          {ack.missing.length > 0 && (
+            <details className="small">
+              <summary className="plain">Noch nicht bestätigt ({ack.missing.length})</summary>
+              <ul>{ack.missing.map((n) => <li key={n}>{n}</li>)}</ul>
+            </details>
+          )}
+        </div>
+      )}
       <div className="card changelog">
         {data.markdown ? <Markdown source={data.markdown} /> : <p className="muted">Kein Changelog vorhanden.</p>}
       </div>

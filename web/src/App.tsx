@@ -13,6 +13,7 @@ import { ViewMenu } from './components/ViewMenu';
 import { PasswordDialog } from './components/PasswordDialog';
 import { Toasts } from './components/Toasts';
 import { ChangeHistoryMenu, ChangePopups } from './components/ChangeNotices';
+import { ImportantDialog, NewsDialog, type News } from './components/News';
 import { FONT_STEPS, applyFontScale, nextStep, saveFontScale } from './fontScale';
 import { reportError } from './helpers';
 
@@ -47,13 +48,8 @@ export function App() {
   const [views, setViews] = useState<SavedView[]>([]);
   const [pwOpen, setPwOpen] = useState(false);
   const [adminTab, setAdminTab] = useState<AdminTab | undefined>(undefined);
-  const [seenVersion, setSeenVersion] = useState(() => {
-    try {
-      return localStorage.getItem('sp-seen-version');
-    } catch {
-      return null;
-    }
-  });
+  const [news, setNews] = useState<News | null>(null);
+  const [newsOpen, setNewsOpen] = useState<'unseen' | 'recent' | null>(null);
 
   async function init() {
     try {
@@ -65,6 +61,7 @@ export function App() {
       if (def && !location.hash) applyView(def.config);
       else if (!nav.employeeId) setNav((n) => ({ ...n, employeeId: boot.me.employeeId ?? boot.employees[0]?.id ?? null }));
       store.connect();
+      get<News>('/api/news').then(setNews, () => {});
       setState('ready');
       if (boot.me.mustChangePassword) setPwOpen(true);
     } catch (e) {
@@ -81,11 +78,18 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Admin hat Verwaltung → Info geöffnet: Leiste ausblenden
   useEffect(() => {
-    const onSeen = (e: Event) => setSeenVersion((e as CustomEvent<string>).detail);
+    const onSeen = () => setNews((n) => (n ? { ...n, banner: false } : n));
     window.addEventListener('sp-version-seen', onSeen);
     return () => window.removeEventListener('sp-version-seen', onSeen);
   }, []);
+
+  /** Leiste geschlossen bzw. Neuigkeiten geöffnet -> am Konto als gelesen merken. */
+  function newsSeen() {
+    setNews((n) => (n ? { ...n, banner: false } : n));
+    post('/api/news/seen').catch(() => {});
+  }
 
   useEffect(() => {
     if (state === 'ready' && location.hash !== toHash(nav)) history.replaceState(null, '', toHash(nav));
@@ -147,22 +151,27 @@ export function App() {
         <details className="usermenu">
           <summary>{boot.me.displayName}</summary>
           <div className="menu">
+            <button onClick={() => setNewsOpen('recent')}>Neuigkeiten</button>
             <button onClick={() => setPwOpen(true)}>Passwort ändern</button>
             <button onClick={() => void logout()}>Abmelden</button>
             <FontSizeControl value={boot.me.fontScale} />
           </div>
         </details>
       </header>
-      {boot.me.isAdmin && boot.version && seenVersion !== boot.version && (
-        <div className="update-banner">
-          Der Schichtplaner wurde auf Version <strong>{boot.version}</strong> aktualisiert.
-          <button className="link" onClick={() => { setAdminTab('info'); setNav({ ...nav, kind: 'admin' }); setSeenVersion(boot.version); }}>
+      {news?.banner && (
+        <div className="update-banner" role="status">
+          Der Schichtplaner wurde auf Version <strong>{news.version}</strong> aktualisiert.
+          <button
+            className="link"
+            onClick={() => {
+              if (news.unseen.length) setNewsOpen('unseen');
+              else { setAdminTab('info'); setNav({ ...nav, kind: 'admin' }); } // nur technische Änderungen: Admin direkt zum Changelog
+              newsSeen();
+            }}
+          >
             Was ist neu?
           </button>
-          <button className="icon" aria-label="Hinweis schließen" onClick={() => {
-            try { localStorage.setItem('sp-seen-version', boot.version); } catch { /* egal */ }
-            setSeenVersion(boot.version);
-          }}>✕</button>
+          <button className="icon" aria-label="Hinweis schließen" onClick={newsSeen}>✕</button>
         </div>
       )}
       <main>
@@ -171,6 +180,16 @@ export function App() {
         {nav.kind === 'year' && <YearView nav={nav} setNav={setNav} />}
         {nav.kind === 'admin' && <AdminView key={adminTab ?? 'default'} initialTab={adminTab} />}
       </main>
+      {newsOpen && (
+        <NewsDialog
+          notes={newsOpen === 'unseen' ? news?.unseen ?? [] : null}
+          onClose={() => setNewsOpen(null)}
+          onFullChangelog={boot.me.isAdmin ? () => { setNewsOpen(null); setAdminTab('info'); setNav({ ...nav, kind: 'admin' }); } : undefined}
+        />
+      )}
+      {!pwOpen && news && news.important.length > 0 && (
+        <ImportantDialog notes={news.important} onDone={() => setNews({ ...news, important: [] })} />
+      )}
       {pwOpen && <PasswordDialog forced={boot.me.mustChangePassword} onClose={() => { setPwOpen(false); void store.loadBootstrap(); }} />}
       <ChangePopups />
       <Toasts />

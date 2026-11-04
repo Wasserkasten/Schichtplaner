@@ -421,3 +421,70 @@ describe('Rückgängig – Mischstände vermeiden', () => {
     expect(codes).toEqual(['S']); // kein „F S“
   });
 });
+
+describe('Neuigkeiten', () => {
+  const CL = `# Changelog
+## [0.4.0] – 2027-01-10
+### Für alle
+- Neue Kürzel ab Januar
+### Wichtig
+- Ab 1.1. gilt **IV** statt **I**.
+### Neu
+- technische Details
+## [0.3.0] – 2026-11-04
+### Für alle
+- Rückgängig
+### Behoben
+- etwas Technisches
+## [0.2.0] – 2026-11-04
+### Neu
+- nur Technik
+`;
+
+  it('liest „Für alle“ und „Wichtig“ je Version aus dem Changelog', async () => {
+    const { parseChangelog, compareVersions } = await import('../src/news.js');
+    const n = parseChangelog(CL);
+    expect(n.map((x) => x.version)).toEqual(['0.4.0', '0.3.0', '0.2.0']);
+    expect(n[0]).toMatchObject({ date: '2027-01-10', forAll: '- Neue Kürzel ab Januar', important: '- Ab 1.1. gilt **IV** statt **I**.' });
+    expect(n[2].forAll).toBe('');
+    expect(compareVersions('0.10.0', '0.9.1')).toBeGreaterThan(0);
+  });
+
+  it('Leiste/Popup je nach Lesestand; neue Konten sehen keine alten Neuigkeiten', async () => {
+    const { parseChangelog, newsFor, acknowledgements } = await import('../src/news.js');
+    const notes = parseChangelog(CL);
+    const user = (seen: string | null, ack: string | null, admin = 0) => ({ seen_version: seen, ack_version: ack, is_admin: admin }) as never;
+    // war auf 0.2.0: sieht Neuigkeiten aus 0.3.0 und 0.4.0, dazu das Popup
+    const a = newsFor(user('0.2.0', '0.2.0'), notes, '0.4.0');
+    expect(a.banner).toBe(true);
+    expect(a.unseen.map((x) => x.version)).toEqual(['0.4.0', '0.3.0']);
+    expect(a.important.map((x) => x.version)).toEqual(['0.4.0']);
+    // gelesen und bestätigt: nichts mehr
+    const b = newsFor(user('0.4.0', '0.4.0'), notes, '0.4.0');
+    expect([b.banner, b.important.length]).toEqual([false, 0]);
+    // Version ohne „Für alle“: Mitarbeiter keine Leiste, Admin schon
+    const notesOnlyTech = parseChangelog('## [0.5.0] – x\n### Neu\n- Technik\n');
+    expect(newsFor(user('0.4.0', '0.4.0'), notesOnlyTech, '0.5.0').banner).toBe(false);
+    expect(newsFor(user('0.4.0', '0.4.0', 1), notesOnlyTech, '0.5.0').banner).toBe(true);
+    // Bestätigungen: Anna (aus dem Test-Setup) hat noch nicht bestätigt
+    db.prepare('UPDATE users SET ack_version = ?').run('0.4.0');
+    db.prepare("UPDATE users SET ack_version = '0.3.0' WHERE username = 'anna'").run();
+    expect(acknowledgements(db, notes)).toMatchObject({ version: '0.4.0', total: 3, acknowledged: 2, missing: ['Anna'] });
+  });
+
+  it('über die API: gesehen / bestätigt wird am Konto gespeichert, neue Benutzer starten aktuell', async () => {
+    const { APP_VERSION } = await import('../src/version.js');
+    db.prepare('UPDATE users SET seen_version = NULL, ack_version = NULL').run(); // wie nach einem Update von einer alten Version
+    const anna = await login('anna');
+    const before = (await app.inject({ method: 'GET', url: '/api/news', headers: { cookie: anna } })).json();
+    expect(before.version).toBe(APP_VERSION);
+    await app.inject({ method: 'POST', url: '/api/news/seen', headers: { cookie: anna } });
+    await app.inject({ method: 'POST', url: '/api/news/ack', headers: { cookie: anna } });
+    const after = (await app.inject({ method: 'GET', url: '/api/news', headers: { cookie: anna } })).json();
+    expect([after.banner, after.unseen.length, after.important.length]).toEqual([false, 0, 0]);
+    // neuer Benutzer über die Verwaltung
+    const admin = await login('admin');
+    await app.inject({ method: 'POST', url: '/api/admin/users', headers: { cookie: admin }, payload: { username: 'neu', displayName: 'Neu', password: 'geheim123', grants: [] } });
+    expect(db.prepare("SELECT seen_version, ack_version FROM users WHERE username = 'neu'").get()).toEqual({ seen_version: APP_VERSION, ack_version: APP_VERSION });
+  });
+});

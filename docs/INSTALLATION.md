@@ -388,8 +388,19 @@ docker compose up -d --build
 docker image prune -f                # alte Images aufräumen
 ```
 
-Welche Version läuft und was sich geändert hat, steht unter *Verwaltung → Info* (Versionsnummer und Changelog); nach einem
-Update weist ein gelber Hinweis die Administratoren darauf hin. Von außen prüfbar: `https://plan.example.de/api/health`
+Welche Version läuft und was sich geändert hat, steht unter *Verwaltung → Info* (Versionsnummer und Changelog).
+
+**Was die Benutzer nach einem Update sehen:**
+
+| Im Changelog der Version steht … | Mitarbeiter | Administratoren |
+|---|---|---|
+| nur technische Abschnitte (*Neu*, *Geändert*, *Behoben*) | nichts | gelbe Leiste „aktualisiert“ → Changelog |
+| ein Abschnitt **Für alle** | gelbe Leiste „Was ist neu?“ mit diesen Punkten, schließbar mit ✕ | ebenso |
+| ein Abschnitt **Wichtig** | beim nächsten Start ein Fenster, das nur mit **Verstanden** schließt | ebenso; unter *Verwaltung → Info* steht, wer schon bestätigt hat |
+
+Gelesen bzw. bestätigt wird am Benutzerkonto gespeichert (gilt auf allen Geräten, auch an gemeinsam genutzten PCs).
+Wer mehrere Updates verpasst hat, sieht die Neuigkeiten aller verpassten Versionen; neue Konten sehen keine alten.
+Über *Benutzermenü → Neuigkeiten* lassen sie sich jederzeit erneut aufrufen. Von außen prüfbar: `https://plan.example.de/api/health`
 liefert z. B. `{"ok":true,"version":"0.3.0"}`.
 
 Die Datenbank wird beim Start automatisch auf das neue Schema gebracht. Die Unterbrechung dauert nur wenige Sekunden;

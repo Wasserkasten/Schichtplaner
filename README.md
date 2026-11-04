@@ -57,7 +57,9 @@ Die laufende Version zeigt die App Administratoren unter *Verwaltung → Info* u
 
 Bei jeder Änderung, die nach `main` geht:
 
-1. Eintrag in `CHANGELOG.md` unter der kommenden Version (*Neu*, *Geändert*, *Behoben*)
+1. Eintrag in `CHANGELOG.md` unter der kommenden Version (*Neu*, *Geändert*, *Behoben*). Was alle Benutzer wissen
+   sollten, zusätzlich unter **Für alle** (erscheint als Hinweisleiste); nur bei einschneidenden Änderungen
+   **Wichtig** (erscheint als Fenster mit „Verstanden“)
 2. Version anheben – `npm version minor --no-git-tag-version --workspaces --include-workspace-root`
    für neue Funktionen, `patch` für reine Fehlerbehebungen
 3. Nach dem Merge den Stand auf `main` taggen, z. B. `git tag v0.3.0 && git push origin v0.3.0`

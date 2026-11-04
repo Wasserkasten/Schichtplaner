@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { readFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { APP_VERSION } from './version.js';
 import { fileURLToPath } from 'node:url';
 
 export type DB = Database.Database;
@@ -27,6 +28,7 @@ export function openDb(file: string): DB {
   db.pragma('busy_timeout = 5000');
   db.exec(loadSchema());
   migrate(db);
+  setSetting(db, 'app_version', APP_VERSION); // für den Trigger „neue Benutzer sehen keine alten Neuigkeiten“
   return db;
 }
 
@@ -39,6 +41,16 @@ function migrate(db: DB): void {
   if (!has('audit_log', 'change_id')) db.exec('ALTER TABLE audit_log ADD COLUMN change_id TEXT');
   if (!has('audit_log', 'undo_of')) db.exec('ALTER TABLE audit_log ADD COLUMN undo_of TEXT');
   db.exec('CREATE INDEX IF NOT EXISTS idx_audit_change ON audit_log(change_id)');
+  // Neuigkeiten: bis zu welcher Version hat der Benutzer die Hinweise gesehen bzw. „Wichtiges“ bestätigt?
+  if (!has('users', 'seen_version')) db.exec('ALTER TABLE users ADD COLUMN seen_version TEXT');
+  if (!has('users', 'ack_version')) db.exec('ALTER TABLE users ADD COLUMN ack_version TEXT');
+  // Neue Konten sollen keine alten Neuigkeiten sehen: beim Anlegen auf die laufende Version setzen
+  db.exec(`CREATE TRIGGER IF NOT EXISTS users_news_start AFTER INSERT ON users WHEN NEW.seen_version IS NULL
+           BEGIN
+             UPDATE users SET seen_version = (SELECT value FROM settings WHERE key = 'app_version'),
+                              ack_version  = (SELECT value FROM settings WHERE key = 'app_version')
+             WHERE id = NEW.id;
+           END`);
 }
 
 export function getSetting(db: DB, key: string, fallback = ''): string {
