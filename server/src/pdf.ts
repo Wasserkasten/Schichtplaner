@@ -8,6 +8,7 @@ import { EntryContext, type EntryDTO, type EntryRow } from './entries.js';
 import type { Permissions } from './permissions.js';
 import { listHolidays, type HolidayRow } from './holiday-store.js';
 import { APP_VERSION } from './version.js';
+import { planStart } from './employment.js';
 
 interface EmployeeRow {
   id: number;
@@ -15,6 +16,8 @@ interface EmployeeRow {
   first_name: string;
   last_name: string;
   vacation_days_per_year: number;
+  entry_date: string | null;
+  exit_date: string | null;
   team_name: string;
   department_name: string;
 }
@@ -52,7 +55,7 @@ export function loadEmployees(db: DB, ids: number[]): EmployeeRow[] {
   if (ids.length === 0) return [];
   return db
     .prepare(
-      `SELECT e.id, e.team_id, e.first_name, e.last_name, e.vacation_days_per_year, t.name AS team_name, d.name AS department_name
+      `SELECT e.id, e.team_id, e.first_name, e.last_name, e.vacation_days_per_year, e.entry_date, e.exit_date, t.name AS team_name, d.name AS department_name
        FROM employees e JOIN teams t ON t.id = e.team_id JOIN departments d ON d.id = t.department_id
        WHERE e.id IN (${ids.map(() => '?').join(',')}) ORDER BY e.sort_order, e.last_name, e.first_name`,
     )
@@ -69,6 +72,7 @@ export function yearPdf(
   const typeById = new Map(types.map((t) => [t.id, t]));
   const holidays = new Map(listHolidays(db, year).map((h) => [h.date, h] as [string, HolidayRow]));
   const ec = new EntryContext(db);
+  const start = planStart(db);
 
   const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margins: { top: 28, left: 28, right: 28, bottom: 8 }, info: { Title: `Jahresübersicht ${year}`, Creator: `Schichtplaner ${APP_VERSION}` } });
   const chunks: Buffer[] = [];
@@ -133,13 +137,16 @@ export function yearPdf(
         const date = iso(year, mo, d);
         const wd = weekday(date);
         const h = holidays.get(date);
-        const bg = h ? (h.kind === 'company' ? C.free : C.holiday) : wd === 0 || wd === 6 ? C.weekend : null;
+        // außerhalb der Beschäftigung bzw. vor dem Planungsbeginn: wie „kein Tag“ ausgrauen
+        const outside = (start && date < start) || (emp.entry_date && date < emp.entry_date) || (emp.exit_date && date > emp.exit_date);
+        const bg = outside ? C.void : h ? (h.kind === 'company' ? C.free : C.holiday) : wd === 0 || wd === 6 ? C.weekend : null;
         if (bg) doc.rect(x, y, colW, rowH).fill(bg);
         doc.font('Helvetica').fontSize(4.5).fillColor(C.muted).text(WD[wd], x + 1.2, y + 1.2, { lineBreak: false });
 
         const list = byDate.get(date) ?? [];
         const typed = list.filter((e) => e.typeId || e.masked).slice(0, 3);
         const notes = list.filter((e) => !e.typeId && !e.masked);
+        const texts = list.filter((e) => e.text && !e.masked); // auch Text an einem Dienst -> Ecke
         if (typed.length) {
           const areaTop = y + 7;
           const areaH = rowH - 9;
@@ -159,7 +166,7 @@ export function yearPdf(
           doc.font('Helvetica-Oblique').fontSize(4.8).fillColor(C.text)
             .text(notes[0].text ?? '', x + 1, y + 8, { width: colW - 2, height: rowH - 9, ellipsis: true });
         }
-        if (notes.length && typed.length) {
+        if (texts.length && typed.length) {
           doc.polygon([x + colW - 5, y], [x + colW, y], [x + colW, y + 5]).fill(C.note);
         }
       }
@@ -191,7 +198,8 @@ export function yearPdf(
     legend(C.holiday, 'Feiertag');
     legend(C.free, 'arbeitsfreier Tag');
     legend(C.weekend, 'Wochenende');
-    if (rows.some((r) => !r.type_id)) legend(C.note, 'Notiz (neben Diensten als Ecke)');
+    if (emp.entry_date || emp.exit_date || start) legend(C.void, 'nicht beschäftigt');
+    if (rows.some((r) => r.text)) legend(C.note, 'Notiz (neben Diensten als Ecke)');
 
     // Fuß
     doc.font('Helvetica').fontSize(7).fillColor(C.muted).text(

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireUser, type AppContext } from '../app.js';
 import { getSetting } from '../db.js';
 import { APP_VERSION } from '../version.js';
+import { dataStart, planStart } from '../employment.js';
 import { EntryContext, type EntryRow } from '../entries.js';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -36,6 +37,8 @@ export async function planRoutes(app: FastifyInstance, { db, hub }: AppContext) 
         sort_order: number;
         active: number;
         vacation_days_per_year: number;
+        entry_date: string | null;
+        exit_date: string | null;
       }[]
     )
       .filter((e) => visible.has(e.team_id))
@@ -49,6 +52,8 @@ export async function planRoutes(app: FastifyInstance, { db, hub }: AppContext) 
         sortOrder: e.sort_order,
         active: !!e.active,
         vacationDaysPerYear: e.vacation_days_per_year,
+        entryDate: e.entry_date,
+        exitDate: e.exit_date,
       }));
 
     const entryTypes = (db.prepare('SELECT * FROM entry_types ORDER BY sort_order, name').all() as Record<string, unknown>[]).map(
@@ -86,7 +91,7 @@ export async function planRoutes(app: FastifyInstance, { db, hub }: AppContext) 
       employees,
       entryTypes,
       users,
-      settings: { holidayState: getSetting(db, 'holiday_state', 'NW') },
+      settings: { holidayState: getSetting(db, 'holiday_state', 'NW'), planStart: planStart(db), dataStart: dataStart(db) },
       version: APP_VERSION,
     };
   });

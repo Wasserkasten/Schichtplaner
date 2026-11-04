@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { NavState } from '../App';
 import { store, useStore } from '../store';
 import { MONTHS, WEEKDAYS, daysInMonth, isWeekend, iso, today, weekday } from '../dates';
-import { fullName, reportError, sortedTeams, teamLabel, typeMap } from '../helpers';
+import { blockedReason, fullName, minPlanDate, reportError, sortedTeams, teamLabel, typeMap } from '../helpers';
 import { EntryChip } from '../components/EntryChip';
 import { CellEditor } from '../components/CellEditor';
 import { CellContent, dayClass, holidayTitle } from './MonthView';
@@ -44,7 +44,7 @@ export function YearView({ nav, setNav }: { nav: NavState; setNav: (n: NavState)
   return (
     <div className="year">
       <div className="toolbar">
-        <button onClick={() => setNav({ ...nav, date: `${year - 1}-01-01` })} aria-label="Vorjahr">◀</button>
+        <button onClick={() => setNav({ ...nav, date: `${year - 1}-01-01` })} aria-label="Vorjahr" disabled={year - 1 < Number(minPlanDate(boot, t).slice(0, 4))}>◀</button>
         <button onClick={() => setNav({ ...nav, date: t })}>Aktuelles Jahr</button>
         <button onClick={() => setNav({ ...nav, date: `${year + 1}-01-01` })} aria-label="Folgejahr">▶</button>
         <h1>{year}</h1>
@@ -97,8 +97,14 @@ export function YearView({ nav, setNav }: { nav: NavState; setNav: (n: NavState)
                   if (i + 1 > daysInMonth(year, m)) return <td key={i} className="void" />;
                   const date = iso(new Date(Date.UTC(year, m, i + 1)));
                   const h = st.holidayOn(date);
+                  const blocked = blockedReason(boot, emp, date);
                   return (
-                    <td key={i} className={`${dayClass(date, t, h)} cell editable`} title={`${WEEKDAYS[weekday(date)]}${h ? ' · ' + holidayTitle(h) : ''}`} onClick={() => setEditing(date)}>
+                    <td
+                      key={i}
+                      className={`${dayClass(date, t, h)} cell${blocked ? ' outside' : ' editable'}`}
+                      title={blocked ? `Kein Eintrag möglich: ${blocked}` : `${WEEKDAYS[weekday(date)]}${h ? ' · ' + holidayTitle(h) : ''}`}
+                      onClick={() => (!blocked || st.cell(emp.id, date).length > 0) && setEditing(date)}
+                    >
                       <CellContent entries={st.cell(emp.id, date)} types={types} />
                     </td>
                   );

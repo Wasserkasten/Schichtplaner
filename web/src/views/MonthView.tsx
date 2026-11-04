@@ -3,7 +3,7 @@ import type { NavState } from '../App';
 import { post } from '../api';
 import { store, useStore } from '../store';
 import { MONTHS, WEEKDAYS, addDays, addMonths, daysInMonth, isWeekend, isoWeek, monthStart, parse, range, today, weekday } from '../dates';
-import { canEditEmployee, departmentName, groupedEmployees, reportError, teamLabel, typeMap } from '../helpers';
+import { blockedReason, canEditEmployee, departmentName, groupedEmployees, minPlanDate, reportError, teamLabel, typeMap } from '../helpers';
 import type { Entry, EntryType, Holiday } from '../types';
 import { EntryChip } from '../components/EntryChip';
 import { CellEditor } from '../components/CellEditor';
@@ -53,8 +53,6 @@ export function MonthView({ nav, setNav }: { nav: NavState; setNav: (n: NavState
   const st = useStore();
   const boot = st.boot!;
   const types = typeMap(boot);
-  const groups = groupedEmployees(boot, nav.teamIds);
-  const flat = groups.flatMap((g) => g.employees);
   const wrapRef = useRef<HTMLDivElement>(null);
   const fit = nav.days === FIT_WIDTH;
   const fitting = useFittingDays(wrapRef, fit, boot.me.fontScale);
@@ -65,6 +63,16 @@ export function MonthView({ nav, setNav }: { nav: NavState; setNav: (n: NavState
   const days = useMemo(() => range(from, count), [from, count]);
   const to = days[days.length - 1];
   const t = today();
+  // nur Mitarbeiter, die im Zeitraum beschäftigt sind (Eintritt/Austritt)
+  const groups = groupedEmployees(boot, nav.teamIds, { from, to });
+  const flat = groups.flatMap((g) => g.employees);
+  // Grenze beim Zurückblättern: Planungsbeginn bzw. Beginn der Daten
+  const minDate = minPlanDate(boot, t);
+  const minFrom = nav.days ? minDate : monthStart(minDate);
+  const atStart = from <= minFrom;
+  useEffect(() => {
+    if (to < minDate) setNav({ ...nav, date: minFrom }); // z. B. alter Link auf einen Zeitraum davor
+  }, [to, minDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     store.loadRange(from, to).catch(reportError);
@@ -76,8 +84,10 @@ export function MonthView({ nav, setNav }: { nav: NavState; setNav: (n: NavState
   const [sel, setSel] = useState<Sel | null>(null);
   const dragging = useRef(false);
 
-  const step = (dir: number) =>
-    setNav({ ...nav, date: nav.days ? addDays(nav.date, dir * count) : addMonths(monthStart(nav.date), dir) });
+  const step = (dir: number) => {
+    const next = nav.days ? addDays(nav.date, dir * count) : addMonths(monthStart(nav.date), dir);
+    setNav({ ...nav, date: next < minFrom ? minFrom : next });
+  };
 
   function changeRange(v: number) {
     // Monat: Bezugsdatum bleibt; feste Tage / Fensterbreite: ab Montag der aktuellen bzw. gezeigten Woche
@@ -95,16 +105,20 @@ export function MonthView({ nav, setNav }: { nav: NavState; setNav: (n: NavState
     for (let ei = Math.min(s.emp0, s.emp1); ei <= Math.max(s.emp0, s.emp1); ei++) {
       const emp = flat[ei];
       if (!canEditEmployee(boot, emp.id)) continue;
-      for (let di = Math.min(s.d0, s.d1); di <= Math.max(s.d0, s.d1); di++) cells.push({ employeeId: emp.id, date: days[di] });
+      for (let di = Math.min(s.d0, s.d1); di <= Math.max(s.d0, s.d1); di++) {
+        if (brush !== 'clear' && blockedReason(boot, emp, days[di])) continue; // außerhalb der Beschäftigung
+        cells.push({ employeeId: emp.id, date: days[di] });
+      }
     }
     if (cells.length === 0) return;
     try {
-      const res = await post<{ created: Entry[]; deleted: number[]; skipped: number; changeId: string }>('/api/entries/bulk', {
+      const res = await post<{ created: Entry[]; deleted: number[]; skipped: number; outside?: number; changeId: string }>('/api/entries/bulk', {
         action: brush === 'clear' ? 'clear' : s.add ? 'add' : 'set',
         typeId: brush === 'clear' ? undefined : brush,
         cells,
       });
       store.applyChange(res.changeId, { created: res.created, deletedIds: res.deleted });
+      if (res.outside) store.toast(`${res.outside} ${res.outside === 1 ? 'Tag' : 'Tage'} übersprungen: außerhalb der Beschäftigung bzw. vor dem Planungsbeginn.`);
       if (res.skipped) store.toast(`${res.skipped} ${res.skipped === 1 ? 'Tag' : 'Tage'} übersprungen: dort schon eingetragen oder bereits 3 Dienste.`);
     } catch (e) {
       reportError(e);
@@ -144,7 +158,7 @@ export function MonthView({ nav, setNav }: { nav: NavState; setNav: (n: NavState
   return (
     <div className="month">
       <div className="toolbar">
-        <button onClick={() => step(-1)} aria-label="zurück">◀</button>
+        <button onClick={() => step(-1)} aria-label="zurück" disabled={atStart} title={atStart ? `Früher geht es nicht: ${boot.settings.planStart ? 'Planungsbeginn' : 'vorher gibt es keine Daten'} (Einstellungen → Planungsbeginn)` : undefined}>◀</button>
         <button onClick={() => setNav({ ...nav, date: nav.days ? mondayOf(t) : t })}>Heute</button>
         <button onClick={() => step(1)} aria-label="vor">▶</button>
         <h1>{title}</h1>
@@ -243,17 +257,23 @@ export function MonthView({ nav, setNav }: { nav: NavState; setNav: (n: NavState
                           {emp.lastName}, {emp.firstName}
                         </button>
                       </th>
-                      {days.map((d, di) => (
-                        <td
-                          key={d}
-                          className={`${dayClass(d, t, st.holidayOn(d))} cell${editable ? ' editable' : ''}${inSel(ei, di) ? ' sel' : ''}`}
-                          onPointerDown={(e) => editable && onDown(ei, di, e)}
-                          onPointerEnter={() => onEnter(ei, di)}
-                          onClick={() => brush === null && setEditing({ employeeId: emp.id, date: d })}
-                        >
-                          <CellContent entries={st.cell(emp.id, d)} types={types} />
-                        </td>
-                      ))}
+                      {days.map((d, di) => {
+                        const blocked = blockedReason(boot, emp, d);
+                        const entries = st.cell(emp.id, d);
+                        const can = editable && !blocked;
+                        return (
+                          <td
+                            key={d}
+                            className={`${dayClass(d, t, st.holidayOn(d))} cell${can ? ' editable' : ''}${blocked ? ' outside' : ''}${inSel(ei, di) && !blocked ? ' sel' : ''}`}
+                            title={blocked ? `Kein Eintrag möglich: ${blocked}` : undefined}
+                            onPointerDown={(e) => editable && onDown(ei, di, e)}
+                            onPointerEnter={() => onEnter(ei, di)}
+                            onClick={() => brush === null && (!blocked || entries.length > 0) && setEditing({ employeeId: emp.id, date: d })}
+                          >
+                            <CellContent entries={entries} types={types} />
+                          </td>
+                        );
+                      })}
                     </tr>
                   );
                 })}
@@ -278,6 +298,8 @@ export function MonthView({ nav, setNav }: { nav: NavState; setNav: (n: NavState
 export function CellContent({ entries, types }: { entries: Entry[]; types: Map<number, EntryType> }) {
   const typed = entries.filter((e) => e.typeId || e.masked);
   const notes = entries.filter((e) => !e.typeId && !e.masked);
+  // Ecke bei jedem Text – auch wenn er an einem Dienst hängt (z. B. „F“ mit „Schulung ab 10 Uhr“)
+  const texts = entries.filter((e) => e.text && !e.masked).map((e) => (e.typeId ? `${types.get(e.typeId)?.code ?? ''}: ${e.text}` : e.text!));
   if (typed.length === 0) {
     return (
       <>
@@ -294,7 +316,7 @@ export function CellContent({ entries, types }: { entries: Entry[]; types: Map<n
           <EntryChip key={e.id} e={e} types={types} />
         ))}
       </div>
-      {notes.length > 0 && <span className="note-mark" title={notes.map((n) => n.text).join('\n')} />}
+      {texts.length > 0 && <span className="note-mark" title={texts.join('\n')} />}
     </>
   );
 }
@@ -328,7 +350,8 @@ export function Legend() {
     <div className="legend">
       <span><span className="swatch hol" /> Feiertag</span>
       <span><span className="swatch hol free" /> arbeitsfreier Tag</span>
-      <span><span className="swatch note-swatch" /> Notiz</span>
+      <span><span className="swatch note-swatch" /> Notiz / Text</span>
+      <span><span className="swatch outside-swatch" /> nicht beschäftigt</span>
       {boot!.entryTypes
         .filter((t) => t.active)
         .map((t) => (

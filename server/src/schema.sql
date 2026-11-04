@@ -25,7 +25,9 @@ CREATE TABLE IF NOT EXISTS employees (
   personnel_no TEXT,
   sort_order   INTEGER NOT NULL DEFAULT 0,
   active       INTEGER NOT NULL DEFAULT 1,
-  vacation_days_per_year REAL NOT NULL DEFAULT 30
+  vacation_days_per_year REAL NOT NULL DEFAULT 30,
+  entry_date   TEXT,                       -- Eintritt (ISO), davor keine Einträge
+  exit_date    TEXT                        -- Austritt (ISO), danach keine Einträge
 );
 
 CREATE TABLE IF NOT EXISTS users (

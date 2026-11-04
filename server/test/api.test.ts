@@ -562,3 +562,49 @@ describe('Konten anlegen und Einrichtungslinks', () => {
     expect((await app.inject({ method: 'GET', url: '/api/public/login-info' })).json().contact).toMatchObject({ name: 'Leitstelle, Herr Meier', phone: '0221 123-45', email: '' });
   });
 });
+
+describe('Eintritt, Austritt, Planungsbeginn', () => {
+  const emp = { teamId: 0, firstName: 'Ina', lastName: 'Intern', entryDate: '2026-03-01', exitDate: '2026-06-30' };
+  const mkEmp = async (admin: string, extra: object = {}) =>
+    (await app.inject({ method: 'POST', url: '/api/admin/employees', headers: { cookie: admin }, payload: { ...emp, teamId: ids.tA, ...extra } })).json().id as number;
+
+  it('keine Einträge vor dem Eintritt und nach dem Austritt; Pinsel überspringt diese Tage', async () => {
+    const admin = await login('admin');
+    const id = await mkEmp(admin);
+    const post = (date: string) => app.inject({ method: 'POST', url: '/api/entries', headers: { cookie: admin }, payload: { employeeId: id, date, typeId: ids.typeF } });
+    const before = await post('2026-02-28');
+    expect(before.statusCode).toBe(422);
+    expect(before.json().error).toContain('tritt erst am 01.03.2026 ein');
+    expect((await post('2026-07-01')).json().error).toContain('am 30.06.2026 ausgetreten');
+    expect((await post('2026-03-01')).statusCode).toBe(200);
+    const bulk = (await app.inject({
+      method: 'POST', url: '/api/entries/bulk', headers: { cookie: admin },
+      payload: { action: 'set', typeId: ids.typeF, cells: ['2026-02-27', '2026-02-28', '2026-03-02'].map((date) => ({ employeeId: id, date })) },
+    })).json();
+    expect([bulk.created.length, bulk.outside]).toEqual([1, 2]);
+    expect((await app.inject({ method: 'POST', url: '/api/admin/employees', headers: { cookie: admin }, payload: { ...emp, teamId: ids.tA, exitDate: '2026-01-01' } })).statusCode).toBe(400);
+  });
+
+  it('Austritt vorziehen: Rückfrage, dann Einträge danach löschen oder behalten (nur noch löschbar)', async () => {
+    const admin = await login('admin');
+    const id = await mkEmp(admin, { exitDate: null });
+    const e = (await app.inject({ method: 'POST', url: '/api/entries', headers: { cookie: admin }, payload: { employeeId: id, date: '2026-08-10', typeId: ids.typeF } })).json();
+    const put = (extra: object) => app.inject({ method: 'PUT', url: `/api/admin/employees/${id}`, headers: { cookie: admin }, payload: { ...emp, teamId: ids.tA, exitDate: '2026-07-31', ...extra } });
+    const ask = await put({});
+    expect(ask.statusCode).toBe(422);
+    expect(ask.json().data).toMatchObject({ outside: 1, first: '2026-08-10' });
+    expect((await put({ outsideEntries: 'keep' })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'PATCH', url: `/api/entries/${e.id}`, headers: { cookie: admin }, payload: { version: e.version, text: 'x' } })).statusCode).toBe(422);
+    expect((await put({ exitDate: '2026-07-30', outsideEntries: 'delete' })).json().deletedOutsideEntries).toBe(1);
+  });
+
+  it('Planungsbeginn: davor nichts eintragbar; Bootstrap liefert Grenzen', async () => {
+    const admin = await login('admin');
+    await app.inject({ method: 'PUT', url: '/api/admin/settings', headers: { cookie: admin }, payload: { holidayState: 'NW', ownTeamLevel: 'edit', defaultLevel: 'view', planStart: '2026-10-01' } });
+    const res = await app.inject({ method: 'POST', url: '/api/entries', headers: { cookie: admin }, payload: { employeeId: ids.eA, date: '2026-09-30', typeId: ids.typeF } });
+    expect(res.json().error).toContain('vor dem Planungsbeginn am 01.10.2026');
+    await app.inject({ method: 'POST', url: '/api/entries', headers: { cookie: admin }, payload: { employeeId: ids.eA, date: '2026-10-05', typeId: ids.typeF } });
+    const boot = (await app.inject({ method: 'GET', url: '/api/bootstrap', headers: { cookie: admin } })).json();
+    expect(boot.settings).toMatchObject({ planStart: '2026-10-01', dataStart: '2026-10-05' });
+  });
+});

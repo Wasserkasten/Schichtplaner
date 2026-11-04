@@ -13,6 +13,20 @@ So wird dieser Changelog in der App verwendet (je Version):
   ### Neu / Geändert / Behoben – technische Details, nur für Administratoren (Verwaltung → Info).
 -->
 
+## [0.4.0] – 2026-11-05
+
+### Für alle
+- **Notiz-Ecke bei jedem Text:** Steht an einem Tag ein Text – auch zusätzlich zu einem Dienst (z. B. „F“ mit „Schulung ab 10 Uhr“) –, zeigt die gelbe Ecke das an. Mit der Maus darüberfahren zeigt den Text.
+- **Ein- und Austritt:** Vor dem ersten und nach dem letzten Arbeitstag erscheinen Kollegen nicht mehr im Plan; solche Tage sind grau schraffiert und gesperrt.
+- **Kein unnötiges Zurückblättern:** Im Kalender geht es nur so weit zurück, wie es Daten gibt.
+
+### Neu
+- **Eintritts- und Austrittsdatum** je Mitarbeiter (*Verwaltung → Mitarbeiter*, Spalte „Beschäftigt“). Außerhalb sind keine Einträge möglich (auch per Pinsel und Rückgängig serverseitig geprüft); Kalender und Tagesübersicht zeigen nur in dem Zeitraum Beschäftigte, Jahreskalender und PDF graue Tage. Wird ein Austritt vorgezogen und gibt es danach noch Einträge, fragt die App: löschen oder behalten (dann nur noch löschbar).
+- **Planungsbeginn** (*Verwaltung → Einstellungen*): davor kein Zurückblättern und keine Einträge. Ohne Einstellung geht es zurück bis zu den ersten vorhandenen Daten (bei leerem Plan bis zum aktuellen Monat).
+
+### Geändert
+- Die Notiz-Ecke erscheint auch bei Text, der an einem Dienst hängt (vorher nur bei eigenständigen Notizen); ebenso im PDF.
+
 ## [0.3.0] – 2026-11-04
 
 ### Für alle

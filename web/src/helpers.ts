@@ -35,10 +35,44 @@ export function teamsByDepartment(boot: Bootstrap, filter?: (t: Team) => boolean
     .filter((g) => g.teams.length > 0);
 }
 
-/** Teams (gefiltert) mit ihren aktiven Mitarbeitern, sortiert nach Abteilung/Team. */
-export function groupedEmployees(boot: Bootstrap, teamIds: number[]): { team: Team; employees: Employee[] }[] {
+const dmy = (d: string) => d.split('-').reverse().join('.');
+
+/** Ist der Mitarbeiter an diesem Tag beschäftigt (Eintritt/Austritt)? */
+export function employedOn(e: Employee, date: string): boolean {
+  return (!e.entryDate || date >= e.entryDate) && (!e.exitDate || date <= e.exitDate);
+}
+/** Überschneidet sich die Beschäftigung mit dem Zeitraum? */
+export function employedDuring(e: Employee, from: string, to: string): boolean {
+  return (!e.entryDate || e.entryDate <= to) && (!e.exitDate || e.exitDate >= from);
+}
+
+/** Warum an diesem Tag nichts eingetragen werden kann – oder null. (Der Server prüft dasselbe.) */
+export function blockedReason(boot: Bootstrap, e: Employee, date: string): string | null {
+  const start = boot.settings.planStart;
+  if (start && date < start) return `vor dem Planungsbeginn (${dmy(start)})`;
+  if (e.entryDate && date < e.entryDate) return `vor dem Eintritt am ${dmy(e.entryDate)}`;
+  if (e.exitDate && date > e.exitDate) return `nach dem Austritt am ${dmy(e.exitDate)}`;
+  return null;
+}
+
+/**
+ * Frühestes Datum, bis zu dem zurückgeblättert werden kann: eingestellter Planungsbeginn,
+ * sonst der Beginn der vorhandenen Daten, höchstens aber der Anfang des aktuellen Monats.
+ */
+export function minPlanDate(boot: Bootstrap, today: string): string {
+  if (boot.settings.planStart) return boot.settings.planStart;
+  const monthStart = today.slice(0, 8) + '01';
+  const data = boot.settings.dataStart;
+  return data && data < monthStart ? data : monthStart;
+}
+
+/** Teams (gefiltert) mit ihren aktiven Mitarbeitern, sortiert nach Abteilung/Team; optional nur im Zeitraum Beschäftigte. */
+export function groupedEmployees(boot: Bootstrap, teamIds: number[], range?: { from: string; to: string }): { team: Team; employees: Employee[] }[] {
   return sortedTeams(boot, (t) => teamIds.length === 0 || teamIds.includes(t.id))
-    .map((team) => ({ team, employees: boot.employees.filter((e) => e.teamId === team.id && e.active) }))
+    .map((team) => ({
+      team,
+      employees: boot.employees.filter((e) => e.teamId === team.id && e.active && (!range || employedDuring(e, range.from, range.to))),
+    }))
     .filter((g) => g.employees.length > 0);
 }
 

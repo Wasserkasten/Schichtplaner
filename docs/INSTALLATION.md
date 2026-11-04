@@ -198,6 +198,7 @@ Alles Folgende geschieht im Browser unter **Verwaltung** (nur für Administrator
 | Einstellung | Bedeutung | Empfehlung |
 |---|---|---|
 | Bundesland | Quelle für die gesetzlichen Feiertage (Anpassungen unter *Feiertage*, siehe [3.8](#38-feiertage-und-arbeitsfreie-tage)) | Bundesland des Betriebs – **vor** dem Anpassen der Feiertage einstellen |
+| Planungsbeginn | frühestes Datum im Plan: davor kein Zurückblättern und keine Einträge. Leer = automatisch bis zu den ersten vorhandenen Daten (bei leerem Plan bis zum aktuellen Monat) | leer lassen; setzen, wenn ältere Monate gezielt nachgetragen werden sollen bzw. ausgeschlossen sein sollen |
 | Recht aller Benutzer auf alle Teams | Grundstufe für jeden angemeldeten Benutzer | **ansehen**: jeder sieht den Gesamtplan; „kein Zugriff“, wenn Teams sich nicht sehen sollen |
 | Recht auf das eigene Team | gilt automatisch für das Team des verknüpften Mitarbeiters | **bearbeiten**: entspricht „jeder Mitarbeiter kann im eigenen Team ändern“ |
 | Hilfe bei Anmeldeproblemen | Ansprechpartner (Name/Stelle, Telefon, E-Mail, Hinweis) für vergessene Passwörter und abgelaufene Links; erscheint öffentlich auf der Anmeldeseite und im Zugangsschreiben | z. B. Leitstelle mit Durchwahl – keine privaten Nummern |
@@ -217,6 +218,10 @@ Diese Werte am besten an die bisherigen Kürzel aus schichtplaner.de anpassen, d
 - **vertraulich**: z. B. Krank. Klartext sehen nur Benutzer, die das Team bearbeiten dürfen, und der Mitarbeiter selbst; alle anderen sehen „abwesend“
 - Nicht mehr benötigte Arten auf **inaktiv** setzen statt sie zu löschen; alte Einträge bleiben dann lesbar.
 
+**Notizen:** Im Zell-Dialog unter *Neuer Eintrag* Text in „Freitext / Notiz“ eingeben – mit gewählter Art hängt der Text
+an diesem Dienst, mit „– nur Freitext –“ ist es eine eigene Notiz. In beiden Fällen zeigt die **gelbe Ecke** in der Zelle,
+dass es Text gibt (Text beim Darüberfahren); eine Notiz ganz ohne Dienst steht direkt in der Zelle.
+
 **Mehrere Dienste an einem Tag:** Ein Mitarbeiter kann an einem Tag bis zu **3** Dienste bzw. An-/Abwesenheiten haben, z. B.
 IV-Dienst und Telefondienst (dieselbe Art nicht doppelt; Notizen zählen nicht mit). Dafür die Arten hier anlegen und im Kalender:
 
@@ -228,8 +233,14 @@ Tage, die schon voll sind oder die Art bereits haben, werden dabei übersprungen
 
 ### 3.4 Mitarbeiter
 
-*Verwaltung → Mitarbeiter → + Mitarbeiter*: Name, Kürzel, Team, Urlaubsanspruch. Ausgeschiedene Mitarbeiter auf **inaktiv** setzen;
-sie verschwinden aus dem Plan, ihre Historie bleibt erhalten.
+*Verwaltung → Mitarbeiter → + Mitarbeiter*: Name, Kürzel, Team, Urlaubsanspruch, **Eintritt** und **Austritt** (beide optional).
+
+- Vor dem Eintritt und nach dem Austritt ist **nichts eintragbar**; der Mitarbeiter erscheint im Kalender und in der
+  Tagesübersicht nur in Zeiträumen, in denen er beschäftigt ist. Im Jahreskalender und im PDF sind die Tage grau.
+- Wird ein Austritt (oder Eintritt) so geändert, dass vorhandene Einträge außerhalb liegen, fragt die App:
+  **löschen** oder **behalten** – behaltene bleiben sichtbar, lassen sich aber nur noch löschen.
+- **inaktiv** blendet einen Mitarbeiter dagegen komplett aus (auch rückwirkend); seine Historie bleibt erhalten.
+  Für Ausgeschiedene ist das Austrittsdatum meist die bessere Wahl, weil der Plan bis zum letzten Tag sichtbar bleibt.
 
 ### 3.5 Benutzer und Rechte
 
