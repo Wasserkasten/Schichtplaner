@@ -120,7 +120,9 @@ class Store {
       const wasOffline = !this.live;
       this.live = true;
       this.emit();
-      if (wasOffline) for (const r of this.ranges.values()) void this.loadRange(r.from, r.to, r.employeeId).catch(() => {});
+      // Über eine Kopie iterieren: loadRange() sortiert this.ranges um (löschen + neu anhängen).
+      // Beim Iterieren über die Map selbst würde derselbe Eintrag endlos erneut besucht.
+      if (wasOffline) for (const r of [...this.ranges.values()]) void this.loadRange(r.from, r.to, r.employeeId).catch(() => {});
     });
     es.addEventListener('entries', (ev) => {
       const msg = JSON.parse((ev as MessageEvent).data) as { action: 'upsert' | 'delete'; items: Entry[] };
