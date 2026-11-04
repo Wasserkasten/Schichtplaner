@@ -414,6 +414,9 @@ Die Bezeichnungen im Cloudflare-Dashboard ändern sich gelegentlich ein wenig; d
 
    Speichern. Den DNS-Eintrag für `plan.example.de` legt Cloudflare selbst an.
 
+   > **Nicht `localhost` eintragen.** cloudflared läuft hier in einem eigenen Container; `localhost` wäre der Container selbst,
+   > und Cloudflare meldet dann *Error 502*. Richtig ist immer `schichtplaner:3000` – auch wenn `APP_BIND` einen anderen Port hat.
+
 **2. `.env` einstellen**
 
 ```bash
@@ -783,7 +786,7 @@ Health-Check für Monitoring (z. B. Uptime Kuma): `https://plan.example.de/api/h
 | `docker compose up` meldet `Bind for 0.0.0.0:3000 failed: port is already allocated` | Port 3000 ist schon belegt (z. B. durch Dockhand). In `.env` `APP_BIND=127.0.0.1:3001` setzen, siehe [Port ändern](#port-ändern) |
 | `docker compose up` meldet `port is already allocated` für Port 80 oder 443 | Port 80/443 ist schon belegt (z. B. Apache/nginx). Den Dienst beenden, [Cloudflare Tunnel](#5-variante-cloudflare-tunnel) nutzen oder [Kapitel 6](#6-variante-bereits-vorhandener-reverse-proxy-nginx-traefik) |
 | cloudflared startet ständig neu, Log: `Provided Tunnel token is not valid` | `CLOUDFLARE_TUNNEL_TOKEN` fehlt oder ist unvollständig kopiert (es ist sehr lang und beginnt mit `eyJ`) |
-| Cloudflare zeigt **Error 502 / Bad Gateway** | Der Tunnel läuft, erreicht aber die App nicht. In der Route muss Type `HTTP` und URL `schichtplaner:3000` stehen (nicht `https`, nicht `localhost`). Bei einem vorhandenen cloudflared-Container prüfen, ob er im Netz `schichtplaner` ist ([5.3](#53-variante-b-vorhandenen-tunnel-nutzen)) |
+| Cloudflare zeigt **Error 502 / Bad Gateway** | Der Tunnel läuft, erreicht aber die App nicht. Ursache zeigt `docker compose logs cloudflared \| grep -i error`: `dial tcp [::1]:…` bzw. `127.0.0.1` → Route zeigt auf `localhost`; `first record does not look like a TLS handshake` → Typ steht auf `HTTPS`; `no such host` → cloudflared ist nicht im Netz `schichtplaner`. In der Route muss Type `HTTP` und URL `schichtplaner:3000` stehen. Bei einem vorhandenen cloudflared-Container prüfen, ob er im Netz `schichtplaner` ist ([5.3](#53-variante-b-vorhandenen-tunnel-nutzen)) |
 | Cloudflare zeigt **Error 1033** | Für diese Domain ist kein laufender Tunnel verbunden: `docker compose logs cloudflared` prüfen |
 | Cloudflare-Fehler 502 **nur manchmal** | Dasselbe Tunnel-Token läuft in zwei cloudflared-Containern; für Schichtplaner einen eigenen Tunnel anlegen ([Kapitel 5](#5-variante-cloudflare-tunnel)) |
 | Build bricht ab mit `Cannot find native binding` bzw. `Cannot find module '@rolldown/binding-…'` | npm hat beim Installieren ein optionales Paket übersprungen (meist ein kurzer Netzwerkfehler), und Docker hat diesen unvollständigen Stand zwischengespeichert. Die aktuelle Version erkennt das beim Bauen selbst und installiert neu. Bei einem älteren Stand oder falls es trotzdem auftritt: `git pull`, dann `docker compose build --no-cache app && docker compose up -d` |
