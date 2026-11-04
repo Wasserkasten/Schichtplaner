@@ -3,7 +3,7 @@ import type { NavState } from '../App';
 import { post } from '../api';
 import { store, useStore } from '../store';
 import { MONTHS, WEEKDAYS, addDays, addMonths, daysInMonth, isWeekend, isoWeek, monthStart, parse, range, today, weekday } from '../dates';
-import { canEditEmployee, groupedEmployees, reportError, typeMap } from '../helpers';
+import { canEditEmployee, departmentName, groupedEmployees, reportError, teamLabel, typeMap } from '../helpers';
 import type { Entry } from '../types';
 import { EntryChip } from '../components/EntryChip';
 import { CellEditor } from '../components/CellEditor';
@@ -163,10 +163,16 @@ export function MonthView({ nav, setNav }: { nav: NavState; setNav: (n: NavState
             </tr>
           </thead>
           <tbody>
-            {groups.map((g) => (
+            {groups.map((g, gi) => (
               <TeamRows key={g.team.id}>
+                {(gi === 0 || groups[gi - 1].team.departmentId !== g.team.departmentId) && (
+                  <tr className="dept-row">
+                    <th className="sticky-col">{departmentName(boot, g.team.departmentId)}</th>
+                    <td colSpan={days.length} />
+                  </tr>
+                )}
                 <tr className="team-row">
-                  <th className="sticky-col">{g.team.name}</th>
+                  <th className="sticky-col" title={teamLabel(boot, g.team.id)}>{g.team.name}</th>
                   {days.map((d) => (
                     <td key={d} className={dayClass(d, t, !!st.holidayOn(d))} title="Besetzung (Dienste)">
                       {coverage(g.employees.map((e) => e.id), d) || ''}

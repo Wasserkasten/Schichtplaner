@@ -124,6 +124,7 @@ table.plan { border-collapse: separate; border-spacing: 0; font-size: 12px; user
 .plan td.sel { box-shadow: inset 0 0 0 2px var(--accent); background: var(--accent-soft); }
 .plan tr.team-row th, .plan tr.team-row td { background: var(--accent-soft); font-weight: 600; font-size: 11px; color: var(--muted); }
 .plan tr.team-row th { color: var(--text); }
+.plan tr.dept-row th, .plan tr.dept-row td { background: var(--accent); color: #fff; font-weight: 700; font-size: 12px; padding: 3px 8px; }
 .plan tr.self th.name { font-weight: 700; }
 .plan td.void { background: repeating-linear-gradient(45deg, transparent 0 4px, var(--line) 4px 5px); }
 .daylink { border: 0; background: none; padding: 2px 0; display: flex; flex-direction: column; align-items: center; width: 100%; }

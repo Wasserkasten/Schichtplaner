@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { del, get, post, put } from '../api';
 import { store, useStore } from '../store';
-import { fullName, reportError } from '../helpers';
+import { departmentName, fullName, reportError, sortedTeams, teamLabel, teamsByDepartment } from '../helpers';
 import type { Employee, EntryType, Level } from '../types';
 import { Modal } from '../components/Modal';
 
@@ -56,6 +56,7 @@ function Employees() {
   const manageable = boot!.teams.filter((t) => t.level === 'manage');
   const [edit, setEdit] = useState<Partial<Employee> | null>(null);
   const [showInactive, setShowInactive] = useState(false);
+  const teamOrder = new Map(sortedTeams(boot!).map((t, i) => [t.id, i]));
   return (
     <div>
       <div className="toolbar">
@@ -65,16 +66,18 @@ function Employees() {
         <label><input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /> inaktive anzeigen</label>
       </div>
       <table className="simple">
-        <thead><tr><th>Name</th><th>Kürzel</th><th>Team</th><th>Pers.-Nr.</th><th>Urlaub/Jahr</th><th /></tr></thead>
+        <thead><tr><th>Name</th><th>Kürzel</th><th>Abteilung</th><th>Team</th><th>Pers.-Nr.</th><th>Urlaub/Jahr</th><th /></tr></thead>
         <tbody>
           {boot!.employees
             .filter((e) => showInactive || e.active)
+            .sort((a, b) => (teamOrder.get(a.teamId) ?? 0) - (teamOrder.get(b.teamId) ?? 0) || a.sortOrder - b.sortOrder || fullName(a).localeCompare(fullName(b), 'de'))
             .map((e) => {
               const team = boot!.teams.find((t) => t.id === e.teamId);
               return (
                 <tr key={e.id} className={e.active ? '' : 'inactive'}>
                   <td>{fullName(e)}</td>
                   <td>{e.shortName}</td>
+                  <td>{team ? departmentName(boot!, team.departmentId) : ''}</td>
                   <td>{team?.name}</td>
                   <td>{e.personnelNo}</td>
                   <td>{e.vacationDaysPerYear}</td>
@@ -110,7 +113,11 @@ function EmployeeForm({ value, onClose }: { value: Partial<Employee>; onClose: (
         <label>Personalnummer<input value={v.personnelNo ?? ''} onChange={(e) => set('personnelNo', e.target.value)} /></label>
         <label>Team
           <select value={v.teamId} onChange={(e) => set('teamId', Number(e.target.value))}>
-            {boot!.teams.filter((t) => t.level === 'manage').map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            {teamsByDepartment(boot!, (t) => t.level === 'manage').map(({ department, teams }) => (
+              <optgroup key={department.id} label={department.name}>
+                {teams.map((t) => <option key={t.id} value={t.id}>{department.name} · {t.name}</option>)}
+              </optgroup>
+            ))}
           </select>
         </label>
         <label>Urlaubstage/Jahr<input type="number" min={0} value={v.vacationDaysPerYear ?? 30} onChange={(e) => set('vacationDaysPerYear', Number(e.target.value))} /></label>
@@ -176,7 +183,7 @@ function Users() {
   const load = () => get<AdminUser[]>('/api/admin/users').then(setUsers, reportError);
   useEffect(() => void load(), []);
   const scopeName = (g: Grant) =>
-    g.scope === 'all' ? 'alle Teams' : g.scope === 'department' ? `Abt. ${boot!.departments.find((d) => d.id === g.scopeId)?.name}` : boot!.teams.find((t) => t.id === g.scopeId)?.name;
+    g.scope === 'all' ? 'alle Teams' : g.scope === 'department' ? `Abt. ${boot!.departments.find((d) => d.id === g.scopeId)?.name}` : teamLabel(boot!, g.scopeId!);
   return (
     <div>
       <div className="toolbar">
@@ -224,7 +231,7 @@ function UserForm({ value, onClose }: { value: AdminUser; onClose: () => void })
         <label>Verknüpfter Mitarbeiter
           <select value={v.employeeId ?? ''} onChange={(e) => setV({ ...v, employeeId: e.target.value ? Number(e.target.value) : null })}>
             <option value="">– keiner –</option>
-            {boot!.employees.map((e) => <option key={e.id} value={e.id}>{fullName(e)}</option>)}
+            {boot!.employees.map((e) => <option key={e.id} value={e.id}>{fullName(e)} ({teamLabel(boot!, e.teamId)})</option>)}
           </select>
         </label>
         <label>{v.id ? 'Neues Passwort (leer = unverändert)' : 'Startpasswort'}
@@ -245,7 +252,13 @@ function UserForm({ value, onClose }: { value: AdminUser; onClose: () => void })
           {g.scope !== 'all' && (
             <select value={g.scopeId ?? ''} onChange={(e) => setGrant(i, { scopeId: Number(e.target.value) })}>
               <option value="">– wählen –</option>
-              {(g.scope === 'team' ? boot!.teams : boot!.departments).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+              {g.scope === 'team'
+                ? teamsByDepartment(boot!).map(({ department, teams }) => (
+                    <optgroup key={department.id} label={department.name}>
+                      {teams.map((t) => <option key={t.id} value={t.id}>{department.name} · {t.name}</option>)}
+                    </optgroup>
+                  ))
+                : boot!.departments.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
             </select>
           )}
           <select value={g.level} onChange={(e) => setGrant(i, { level: e.target.value as Grant['level'] })}>

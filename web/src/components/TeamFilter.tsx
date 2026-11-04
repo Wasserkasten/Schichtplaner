@@ -1,4 +1,5 @@
 import { useStore } from '../store';
+import { teamLabel } from '../helpers';
 
 export function TeamFilter({ value, onChange }: { value: number[]; onChange: (ids: number[]) => void }) {
   const { boot } = useStore();
@@ -7,7 +8,7 @@ export function TeamFilter({ value, onChange }: { value: number[]; onChange: (id
     value.length === 0
       ? 'Alle Teams'
       : value.length === 1
-        ? boot.teams.find((t) => t.id === value[0])?.name ?? '1 Team'
+        ? teamLabel(boot, value[0])
         : `${value.length} Teams`;
   const toggle = (ids: number[], on: boolean) => {
     const set = new Set(value);

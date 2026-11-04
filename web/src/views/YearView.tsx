@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { NavState } from '../App';
 import { store, useStore } from '../store';
 import { MONTHS, WEEKDAYS, daysInMonth, isWeekend, iso, today, weekday } from '../dates';
-import { fullName, reportError, typeMap } from '../helpers';
+import { fullName, reportError, sortedTeams, teamLabel, typeMap } from '../helpers';
 import { EntryChip } from '../components/EntryChip';
 import { CellEditor } from '../components/CellEditor';
 import { dayClass } from './MonthView';
@@ -39,7 +39,7 @@ export function YearView({ nav, setNav }: { nav: NavState; setNav: (n: NavState)
     }
   }
 
-  const teams = boot.teams;
+  const teams = sortedTeams(boot, (tm) => boot.employees.some((e) => e.teamId === tm.id && e.active));
   return (
     <div className="year">
       <div className="toolbar">
@@ -49,7 +49,7 @@ export function YearView({ nav, setNav }: { nav: NavState; setNav: (n: NavState)
         <h1>{year}</h1>
         <select value={emp.id} onChange={(e) => setNav({ ...nav, employeeId: Number(e.target.value) })}>
           {teams.map((tm) => (
-            <optgroup key={tm.id} label={tm.name}>
+            <optgroup key={tm.id} label={teamLabel(boot, tm.id)}>
               {boot.employees
                 .filter((e) => e.teamId === tm.id && e.active)
                 .map((e) => (

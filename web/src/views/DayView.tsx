@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { NavState } from '../App';
 import { store, useStore } from '../store';
 import { addDays, fmtLong, today } from '../dates';
-import { canEditEmployee, groupedEmployees, reportError, typeMap } from '../helpers';
+import { canEditEmployee, groupedEmployees, reportError, teamLabel, typeMap } from '../helpers';
 import type { Employee, Entry, EntryType } from '../types';
 import { EntryChip } from '../components/EntryChip';
 import { CellEditor } from '../components/CellEditor';
@@ -20,7 +20,7 @@ export function DayView({ nav, setNav }: { nav: NavState; setNav: (n: NavState) 
   }, [date]);
 
   const groups = groupedEmployees(boot, nav.teamIds);
-  const teamName = new Map(boot.teams.map((t) => [t.id, t.name]));
+  const teamName = new Map(boot.teams.map((t) => [t.id, teamLabel(boot, t.id)]));
   const holiday = st.holidayOn(date);
 
   // Pro Eintragsart sammeln
