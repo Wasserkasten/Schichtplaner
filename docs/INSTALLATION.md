@@ -186,7 +186,8 @@ Ohne `ADMIN_PASSWORD` erzeugt die App ein zufälliges Passwort und schreibt es i
 
 ## 3. Ersteinrichtung in der App
 
-Alles Folgende geschieht im Browser unter **Verwaltung** (nur für Administratoren sichtbar). Empfohlene Reihenfolge:
+Alles Folgende geschieht im Browser unter **Verwaltung**: oben rechts auf den eigenen Namen klicken → **⚙ Verwaltung**
+(nur für Administratoren und Team-Verwalter sichtbar). Die Kopfzeile färbt sich dann dunkler; **← Zurück zum Plan** führt zurück. Empfohlene Reihenfolge:
 
 > **Erst einmal nur ausprobieren?** Mit [Beispieldaten](#39-beispieldaten-zum-ausprobieren) ist der Plan in einem Klick gefüllt
 > und lässt sich danach genauso schnell wieder leeren.
@@ -220,14 +221,18 @@ Diese Werte am besten an die bisherigen Kürzel aus schichtplaner.de anpassen, d
 
 **Notizen:** Im Zell-Dialog unter *Neuer Eintrag* Text in „Freitext / Notiz“ eingeben – mit gewählter Art hängt der Text
 an diesem Dienst, mit „– nur Freitext –“ ist es eine eigene Notiz. In beiden Fällen zeigt die **gelbe Ecke** in der Zelle,
-dass es Text gibt (Text beim Darüberfahren); eine Notiz ganz ohne Dienst steht direkt in der Zelle.
+dass es Text gibt; beim Darüberfahren mit der Maus erscheint er sofort. Der Text selbst steht nicht in der Zelle, damit der Plan übersichtlich bleibt.
 
 **Mehrere Dienste an einem Tag:** Ein Mitarbeiter kann an einem Tag bis zu **3** Dienste bzw. An-/Abwesenheiten haben, z. B.
 IV-Dienst und Telefondienst (dieselbe Art nicht doppelt; Notizen zählen nicht mit). Dafür die Arten hier anlegen und im Kalender:
 
 - im Zell-Dialog unter *Neuer Eintrag* hinzufügen – an einem einzelnen Tag wird standardmäßig **zusätzlich** eingetragen,
   über einen Zeitraum (z. B. Urlaub) werden vorhandene Dienste ersetzt; beides lässt sich mit dem Häkchen umschalten, oder
-- mit dem Pinsel bei gesetztem Häkchen **„zusätzlich eintragen“** bzw. mit **Strg** (Mac: ⌘) beim Klicken.
+- mit dem Pinsel: Ist ein Feld schon belegt, fragt die App **Überschreiben** oder **Zusätzlich eintragen** (auf Wunsch „für diesen
+  Pinsel nicht mehr fragen“). Mit gedrückter **Strg**-Taste (Mac: ⌘) trägt der Pinsel ohne Rückfrage zusätzlich ein.
+
+**Löschen mit dem Radiergummi:** Gibt es im markierten Bereich verschiedene Einträge (z. B. F und Telefondienst oder eine Notiz),
+fragt die App, was entfernt werden soll – die übrigen bleiben stehen.
 
 Tage, die schon voll sind oder die Art bereits haben, werden dabei übersprungen (mit Hinweis).
 
@@ -295,8 +300,23 @@ Jeder Benutzer kann im Menü **Ansichten** die aktuelle Auswahl speichern (Ansic
 Der Kalender nutzt immer die volle Fensterbreite. Als **Zeitraum** gibt es *Monat*, 7/14 Tage, 4/6 Wochen und **Fensterbreite** –
 dann werden so viele Tage gezeigt, wie nebeneinander passen (auf einem 1920-px-Bildschirm etwa 50), ab Montag der aktuellen Woche.
 
-**Schriftgröße:** im Benutzermenü oben rechts mit **A−** / **A+** (90 % bis 175 %, Klick auf die Prozentzahl = 100 %). Die Einstellung
-gehört zum Benutzerkonto und gilt damit auf allen Geräten – auch, wenn sich mehrere Kollegen einen PC teilen.
+**Monat oder Jahr direkt wählen:** auf die Überschrift (z. B. „November 2026 ▾“) klicken – es öffnet sich eine Monats- bzw. Jahresauswahl.
+
+**Profil & Einstellungen** (oben rechts auf den eigenen Namen klicken), für jeden Benutzer:
+
+| Bereich | Inhalt |
+|---|---|
+| Konto | Name, Benutzername, verknüpfter Mitarbeiter; **Passwort ändern** |
+| Darstellung | **Automatisch** (wie das Gerät), **Hell** oder **Dunkel** |
+| Benachrichtigungen | Hinweis beim Start, wenn andere meine Einträge geändert haben (an/aus) |
+| Schriftgröße | 90 % bis 175 % |
+
+Darstellung und Schriftgröße gehören zum Benutzerkonto und gelten damit auf allen Geräten – auch, wenn sich mehrere Kollegen einen PC teilen.
+
+**Änderungen an meinem Plan:** Hat jemand anderes (z. B. die Teamleitung) Einträge eines Mitarbeiters geändert, sieht dieser beim
+nächsten Start einen Hinweis „… hat seit deinem letzten Besuch 3 Änderungen an deinem Plan vorgenommen“. Unter *Benutzermenü →
+📝 Änderungen an meinem Plan* steht jederzeit die vollständige Liste aller Änderungen an den eigenen Einträgen (wer, wann, was;
+Neues ist markiert). Voraussetzung: Das Benutzerkonto ist mit dem Mitarbeiter verknüpft.
 
 ### 3.7 Als App installieren (PWA)
 
@@ -334,6 +354,22 @@ Die Liste gilt für alle Abteilungen gemeinsam. Rosenmontag usw. jedes Jahr neu 
 
 > **Bundesland wechseln:** Die unveränderten gesetzlichen Feiertage werden in allen bereits eingerichteten Jahren durch die des
 > neuen Bundeslandes ersetzt. Eigene, geänderte und arbeitsfreie Tage bleiben erhalten.
+
+### 3.8a Schulferien
+
+*Verwaltung → Ferien*
+
+Schulferien erscheinen im Kalender als **türkiser Balken** über den Tagen, im Jahreskalender und in der Tagesübersicht.
+Sie sind nur ein Hinweis (z. B. für die Urlaubsplanung) und sperren nichts.
+
+- **Bundesland** oben wählen (Standard: das Bundesland der Feiertage).
+- **Aus Quelle laden …** holt die Ferien des gewählten Jahres von [openholidaysapi.org](https://www.openholidaysapi.org) und zeigt,
+  was fehlt, schon vorhanden ist oder abweicht. Ausgewählte Zeiträume werden übernommen; überschneidende ersetzt.
+  Abgefragt wird nur bei diesem Klick – dafür braucht der Server Internetzugang zu `openholidaysapi.org`
+  (hinter einem Proxy bei Node.js `NODE_USE_ENV_PROXY=1` und `HTTPS_PROXY` setzen).
+- **+ Zeitraum**, **Bearbeiten**, **Löschen** für eigene Anpassungen, z. B. bewegliche Ferientage.
+
+Die Ferien jedes Jahres einmal übernehmen, sobald sie feststehen (meist mehrere Jahre im Voraus veröffentlicht).
 
 ### 3.9 Beispieldaten zum Ausprobieren
 

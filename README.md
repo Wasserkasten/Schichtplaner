@@ -9,9 +9,11 @@ Konzept, Rechtemodell und Fahrplan: **[docs/KONZEPT.md](docs/KONZEPT.md)** · In
 
 - **Kalender**: Mitarbeiter (nach Abteilung/Team gruppiert) × Tage über die volle Fensterbreite, KW, Wochenenden, Feiertage;
   bis zu 3 Dienste pro Mitarbeiter und Tag.
-- **Schriftgröße** pro Benutzer einstellbar (Benutzermenü), gilt auf allen Geräten.
   Klick auf eine Zelle öffnet den Bearbeitungsdialog; mit dem **Pinsel** (Eintragsart wählen) lassen sich
-  Zellen anklicken oder ganze Bereiche aufziehen.
+  Zellen anklicken oder ganze Bereiche aufziehen (Rückfrage überschreiben/zusätzlich, gezieltes Löschen).
+  Monat/Jahr per Klick auf die Überschrift, Notizen als Tooltip.
+- **Profil & Einstellungen** je Benutzer: Hell-/Dunkelmodus, Schriftgröße, Passwort, Benachrichtigungen – gilt auf allen Geräten.
+- **Änderungen an meinem Plan**: Hinweis beim Start und Liste, wenn andere die eigenen Einträge geändert haben.
 - **Tagesübersicht**: Wer hat welchen Dienst, wer ist abwesend, wer hat keinen Eintrag?
 - **Jahreskalender** je Mitarbeiter mit Urlaubskonto und Auswertung.
 - **Gespeicherte Ansichten** und persönliche Standardansicht.
@@ -24,12 +26,14 @@ Konzept, Rechtemodell und Fahrplan: **[docs/KONZEPT.md](docs/KONZEPT.md)** · In
 - **Jahresübersicht drucken und als PDF** (einzeln oder ganzes Team).
 - **Mehrbenutzer**: Live-Updates (Server-Sent Events) und Konflikterkennung.
 - **PWA**: auf Handy und PC installierbar, responsives Layout.
+- **Schulferien** je Bundesland (openholidaysapi.org oder selbst gepflegt) als Markierung im Kalender.
+- **Backups** mit Zeitplan, Liste, Herunterladen/Hochladen und Einspielen im laufenden Betrieb (*Verwaltung → Backups*).
 - **Feiertage** je Bundesland plus eigene arbeitsfreie Tage (Heiligabend, Silvester, Rosenmontag …), pflegbar unter *Verwaltung → Feiertage*.
 - **Beispieldaten** per Klick einfügen und wieder entfernen (*Verwaltung → Einstellungen*).
 
 ## Installation
 
-**Empfohlen für den Betrieb: Docker** – App und automatisches HTTPS (Caddy) mit einem Befehl, tägliche Backups inklusive:
+**Empfohlen für den Betrieb: Docker** – App und automatisches HTTPS (Caddy) mit einem Befehl, automatische Backups inklusive:
 
 ```bash
 git clone https://github.com/wasserkasten/schichtplaner.git && cd schichtplaner

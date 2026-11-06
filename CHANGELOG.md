@@ -2,7 +2,7 @@
 
 Alle wesentlichen Änderungen am Schichtplaner. Versionsnummern nach [Semantic Versioning](https://semver.org/lang/de/):
 **MAJOR.MINOR.PATCH** – solange die Version mit `0.` beginnt, ist der Schichtplaner noch in Erprobung.
-Die aktuell installierte Version steht unter *Verwaltung → Info*.
+Die aktuell installierte Version steht unter *Benutzermenü → ⚙ Verwaltung → Info*.
 
 <!--
 So wird dieser Changelog in der App verwendet (je Version):
@@ -12,6 +12,33 @@ So wird dieser Changelog in der App verwendet (je Version):
                    „Verstanden“ bestätigt werden muss; Administratoren sehen, wer schon bestätigt hat.
   ### Neu / Geändert / Behoben – technische Details, nur für Administratoren (Verwaltung → Info).
 -->
+
+## [0.5.0] – 2026-11-06
+
+### Für alle
+- **Neues Menü oben rechts:** Klick auf deinen Namen öffnet **Profil & Einstellungen** – mit **Hell- und Dunkelmodus**, Schriftgröße und Passwort ändern. Die Verwaltung ist (für Berechtigte) ebenfalls hier zu finden.
+- **Änderungen an deinem Plan:** Hat jemand anderes deine Einträge geändert, siehst du das beim nächsten Start. Im Menü unter **📝 Änderungen an meinem Plan** steht jederzeit, wer wann was geändert hat.
+- **Pinsel auf belegtem Feld:** Die App fragt jetzt, ob der vorhandene Eintrag **überschrieben** oder **zusätzlich eingetragen** werden soll. Mit **Strg** trägt der Pinsel ohne Rückfrage zusätzlich ein.
+- **Gezielt löschen:** Stehen in den markierten Feldern verschiedene Einträge, kannst du auswählen, welche entfernt werden.
+- **Monat oder Jahr direkt wählen:** auf die Überschrift (z. B. „November 2026 ▾“) klicken.
+- **Kommentare beim Darüberfahren:** Der Text einer Notiz erscheint sofort, sobald die Maus über dem Feld ist. Im Kalender selbst zeigt nur noch die gelbe Ecke, dass es Text gibt.
+- **Schulferien** sind im Kalender als türkiser Balken über den Tagen markiert.
+- **Wochenenden** sind deutlicher abgesetzt.
+
+### Neu
+- **Backups** (*Verwaltung → Backups*): Zeitplan (aus, stündlich, täglich, wöchentlich mit Uhrzeit), Anzahl aufbewahrter Sicherungen, optional zweiter Speicherort (z. B. NAS); Liste aller Sicherungen mit Art und Größe; **Jetzt sichern**, Herunterladen, Löschen, Hochladen (mit Prüfung) und **Einspielen im laufenden Betrieb** – vorher wird automatisch eine Sicherung „vor Einspielen“ angelegt, angemeldete Benutzer bleiben angemeldet. Verpasste Termine werden nach dem Start nachgeholt.
+- **Schulferien** je Bundesland (*Verwaltung → Ferien*): aus openholidaysapi.org übernehmen (Abgleich fehlt/vorhanden/abweichend) oder selbst pflegen; Anzeige im Kalender, Jahreskalender und in der Tagesübersicht.
+- **Profil & Einstellungen** je Benutzer: Darstellung Automatisch/Hell/Dunkel (am Konto gespeichert), Benachrichtigungen an/aus, Schriftgröße, Passwort.
+- **Änderungen an meinem Plan:** Hinweis beim Start über Änderungen anderer an den eigenen Einträgen, vollständige Liste mit „neu“-Markierung und Filter „nur von anderen“; Live-Hinweis, wenn jemand während der Sitzung ändert.
+- **Monats- und Jahresauswahl** per Klick auf die Überschrift (Kalender und Jahreskalender).
+- Protokoll: lesbare Texte für Sicherungen, Backup-Zeitplan und Schulferien.
+
+### Geändert
+- **Verwaltung im Benutzermenü** statt in der Hauptnavigation; im Verwaltungsbereich ist die Kopfzeile dunkler gefärbt, **← Zurück zum Plan** führt zurück.
+- Pinsel: Rückfrage auf belegten Feldern ersetzt das Häkchen „zusätzlich eintragen“; Radiergummi fragt bei gemischten Einträgen nach.
+- Notizen ohne Dienst stehen nicht mehr als Text in der Zelle, sondern nur als gelbe Ecke mit sofortigem Tooltip.
+- Wochenenden kräftiger hinterlegt (hell und dunkel).
+- Automatische Sicherungen laufen jetzt immer (Standard täglich 02:30 Uhr in `data/backups` neben der Datenbank bzw. `BACKUP_DIR`) und werden in der App eingestellt; `BACKUP_KEEP` ist nur noch die Vorgabe.
 
 ## [0.4.0] – 2026-11-05
 
