@@ -7,7 +7,7 @@
 | Wofür | dauerhafter, öffentlich erreichbarer Betrieb | Ausprobieren, Entwicklung, oder wenn Docker nicht erlaubt ist |
 | HTTPS | automatisch (Caddy **oder** Cloudflare Tunnel ist dabei) | selbst einrichten (Caddy/nginx/cloudflared) |
 | Neustart nach Absturz/Reboot | automatisch | selbst einrichten (systemd) |
-| Backups | automatisch täglich | automatisch, wenn `BACKUP_DIR` gesetzt ist |
+| Backups | automatisch (Zeitplan in der App) | ebenso; Ordner `backups` neben der Datenbank oder `BACKUP_DIR` |
 | Updates | `git pull` + ein Befehl | `git pull` + Build + Neustart |
 | Abhängigkeiten auf dem Server | nur Docker | Node.js 22 |
 
@@ -413,7 +413,7 @@ docker compose up -d                 # wieder starten
 
 ```bash
 cd /opt/schichtplaner
-docker compose exec app node server/dist/cli.js backup /data/backups/vor-update.db   # Sicherheitskopie
+docker compose exec app node server/dist/cli.js backup /data/backups/manuell-$(date +%Y%m%d-%H%M%S).db   # Sicherheitskopie (oder in der App: Backups → Jetzt sichern)
 git pull
 docker compose up -d --build
 docker image prune -f                # alte Images aufräumen
@@ -445,45 +445,76 @@ docker compose pull --ignore-buildable && docker compose build --pull app && doc
 
 ### 4.3 Backups
 
-**Automatisch:** Die App sichert die Datenbank etwa eine Minute nach dem Start und danach alle 24 Stunden nach
-`/data/backups` im Docker-Volume. Aufbewahrt werden die letzten `BACKUP_KEEP` Sicherungen (Standard 14).
+*Benutzermenü → ⚙ Verwaltung → Backups* (nur Administratoren)
+
+Eine Sicherung ist eine vollständige Kopie der Datenbank: Plan, Mitarbeiter, Benutzer mit Rechten, Einstellungen und Protokoll.
+Sie entsteht im laufenden Betrieb und ist trotzdem konsistent – niemand muss sich abmelden.
+
+**Zeitplan** (Abschnitt *Automatische Sicherung*):
+
+| Einstellung | Möglichkeiten | Standard |
+|---|---|---|
+| Häufigkeit | Aus · Stündlich (zur gewählten Minute) · Täglich (Uhrzeit) · Wöchentlich (Wochentag + Uhrzeit) | täglich 02:30 Uhr |
+| Aufbewahren | Anzahl der automatischen Sicherungen, die behalten werden (ältere werden gelöscht) | 14 (bzw. `BACKUP_KEEP`) |
+| Zusätzlicher Speicherort | zweiter Ordner, in den jede Sicherung zusätzlich kopiert wird, z. B. ein eingebundenes NAS | leer |
+
+War der Server zum geplanten Zeitpunkt aus, wird die Sicherung kurz nach dem Start nachgeholt. Die Uhrzeit richtet sich nach `TZ`
+(Docker: `Europe/Berlin`).
+
+**Arten von Sicherungen** in der Liste:
+
+| Art | Entsteht durch | Wird automatisch gelöscht? |
+|---|---|---|
+| automatisch | Zeitplan | ja, nur die neuesten *Aufbewahren* bleiben |
+| von Hand | Knopf **Jetzt sichern** | nein |
+| vor Einspielen | automatisch, bevor eine Sicherung eingespielt wird | nein |
+| hochgeladen | **Sicherung hochladen …** (z. B. vom alten Server) | nein |
+
+Je Sicherung: **⬇** herunterladen, **↺ Einspielen**, **🗑** löschen.
+
+**Einspielen** setzt alle Daten auf den Stand der Sicherung zurück – auch Benutzer, Rechte und Einstellungen; was danach
+eingetragen wurde, ist weg. Deshalb legt die App vorher automatisch eine Sicherung „vor Einspielen“ an, mit der sich das
+Einspielen wieder rückgängig machen lässt. Angemeldete Benutzer bleiben angemeldet, offene Browser zeigen sofort den
+eingespielten Stand. Nicht zurückgesetzt werden der Zeitplan und die Liste der Sicherungen selbst. Sicherungen älterer
+Versionen lassen sich ebenfalls einspielen (neuere Felder bleiben dann leer bzw. auf dem Standard).
+
+**Hochladen:** Beim Hochladen prüft die App, ob die Datei eine unbeschädigte Schichtplaner-Datenbank ist. Danach steht sie in
+der Liste und kann eingespielt werden – so zieht der Schichtplaner auf einen neuen Server um.
+
+**Wichtig – Sicherungen vom Server wegbringen.** Liegen sie nur auf dem Server, helfen sie bei einem Serverausfall nicht. Möglichkeiten:
+
+- ab und zu eine Sicherung mit **⬇** herunterladen,
+- einen **zusätzlichen Speicherort** auf einem anderen Laufwerk/NAS einrichten. Unter Docker muss der Ordner dafür in den
+  Container eingebunden werden, in `docker-compose.yml` beim Dienst `app` unter `volumes`:
+
+  ```yaml
+      volumes:
+        - data:/data
+        - /mnt/nas/schichtplaner:/backup-extra     # Ordner auf dem Server : Ordner im Container
+  ```
+
+  Die App läuft im Container als Benutzer mit der ID 1000 – der Ordner muss für ihn beschreibbar sein
+  (`sudo chown 1000:1000 /mnt/nas/schichtplaner`). Nach `docker compose up -d` in der App als zusätzlichen Speicherort
+  `/backup-extra` eintragen. Schlägt das Kopieren fehl
+  (z. B. NAS nicht erreichbar), steht das oben auf der Backup-Seite; die Sicherung im Hauptordner ist trotzdem vorhanden.
+- oder per Cron abholen (`crontab -e`, täglich 3:30 Uhr):
+
+  ```cron
+  30 3 * * * cd /opt/schichtplaner && mkdir -p backups && docker compose cp app:/data/backups/. ./backups/ >/dev/null 2>&1
+  ```
+
+**Über die Kommandozeile** (z. B. wenn die App nicht mehr startet):
 
 ```bash
-docker compose exec app ls -lh /data/backups
-```
+docker compose exec app ls -lh /data/backups                                            # Sicherungen anzeigen
+docker compose exec app node server/dist/cli.js backup /data/backups/manuell-$(date +%Y%m%d-%H%M%S).db
 
-**Manuell** (im laufenden Betrieb möglich, die Kopie ist konsistent):
-
-```bash
-docker compose exec app node server/dist/cli.js backup /data/backups/manuell-$(date +%F).db
-```
-
-**Wichtig – Sicherungen vom Server wegkopieren.** Liegen die Backups nur auf dem Server, helfen sie bei einem Serverausfall nicht. Die
-Backups lassen sich auf den Server-Rechner kopieren und von dort z. B. per `rsync`/`scp` abholen:
-
-```bash
-mkdir -p backups
-docker compose cp app:/data/backups/. ./backups/
-# vom eigenen PC aus:
-scp -r benutzer@plan.example.de:/opt/schichtplaner/backups ./schichtplaner-backups
-```
-
-Optional per Cron automatisieren (`crontab -e`, täglich 3:30 Uhr):
-
-```cron
-30 3 * * * cd /opt/schichtplaner && mkdir -p backups && docker compose cp app:/data/backups/. ./backups/ >/dev/null 2>&1
-```
-
-**Wiederherstellen:**
-
-```bash
-docker compose stop app
+docker compose stop app                                                                  # Wiederherstellen offline
 docker compose run --rm --no-deps app node server/dist/cli.js restore /data/backups/<datei>.db
 docker compose start app
 ```
 
-Der bisherige Stand wird dabei vorsichtshalber als `/data/schichtplaner.db.vor-wiederherstellung.db` gesichert.
-Eine Sicherung vom eigenen PC zurückspielen: erst mit `docker compose cp ./datei.db app:/data/backups/` in den Container kopieren.
+Beim Wiederherstellen per Kommandozeile wird der bisherige Stand als `/data/schichtplaner.db.vor-wiederherstellung.db` gesichert.
 
 ### 4.4 Passwort vergessen / ausgesperrt
 
@@ -505,7 +536,7 @@ Nach zu vielen Fehlversuchen ist eine Anmeldung 5 Minuten gesperrt; `docker comp
 | Was | Wo |
 |---|---|
 | Datenbank | Docker-Volume `schichtplaner_data` → `/data/schichtplaner.db` im Container |
-| Automatische Backups | dasselbe Volume → `/data/backups/` |
+| Sicherungen | dasselbe Volume → `/data/backups/` (optional zusätzlich ein eigener Ordner, siehe [4.3](#43-backups)) |
 | HTTPS-Zertifikate | Docker-Volume `schichtplaner_caddy` |
 | Konfiguration | `/opt/schichtplaner/.env` |
 
@@ -881,8 +912,8 @@ ADMIN_PASSWORD=test1234
 | `SECURE_COOKIES` | Anmelde-Cookie nur über HTTPS senden; im Internet **immer `true`** | `false` (Docker: `true`) |
 | `TRUST_PROXY` | `X-Forwarded-For` vom vorgeschalteten Proxy übernehmen; `false`, wenn die App ohne Proxy direkt erreichbar ist | `true` |
 | `ADMIN_PASSWORD` | Passwort des ersten Benutzers `admin`, nur wenn noch kein Benutzer existiert | zufällig, steht im Log |
-| `BACKUP_DIR` | Verzeichnis für tägliche automatische Sicherungen; leer = keine | leer (Docker: `/data/backups`) |
-| `BACKUP_KEEP` | Anzahl aufbewahrter automatischer Sicherungen | `14` |
+| `BACKUP_DIR` | Ordner für Sicherungen (Zeitplan und Verwaltung unter *Verwaltung → Backups*) | Unterordner `backups` neben der Datenbank (Docker: `/data/backups`) |
+| `BACKUP_KEEP` | Vorgabe für „Aufbewahren“, solange in der App nichts eingestellt wurde | `14` |
 | `TZ` | Zeitzone für Logs und Zeitstempel der Sicherungsdateien | Systemzeit (Docker: `Europe/Berlin`) |
 
 ### 9.2 Zusätzliche Werte in `.env` (nur Docker Compose)

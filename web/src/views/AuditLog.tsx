@@ -67,8 +67,20 @@ function describeAdmin(r: Row): string {
       const removed = Number(a?.removed ?? 0);
       return `Feiertage ${r.entity_id} aus Quelle übernommen: ${imported}${removed ? `, ${removed} entfernt` : ''}`;
     }
-    case 'settings':
+    case 'settings': {
+      const bs = a?.backupSchedule as { mode?: string } | undefined;
+      if (bs) return `Backup-Zeitplan geändert: ${({ off: 'aus', hourly: 'stündlich', daily: 'täglich', weekly: 'wöchentlich' } as Record<string, string>)[bs.mode ?? ''] ?? bs.mode}`;
+      if (a?.schoolHolidayState) return `Ferien-Bundesland: ${String(a.schoolHolidayState)}`;
       return 'Einstellungen geändert';
+    }
+    case 'school_holiday':
+      return `Schulferien ${verb}: ${pick('name')}${pick('start') ? ` (${dmy(pick('start'))} – ${dmy(pick('end'))})` : ''}`;
+    case 'school_holidays':
+      return `Schulferien aus Quelle übernommen (${pick('state')}): ${Number(a?.imported ?? 0)} Zeiträume`;
+    case 'backup':
+      if (r.action === 'delete') return `Sicherung gelöscht: ${pick('name')}`;
+      if (r.action === 'update') return `Sicherung eingespielt: ${pick('restored')} (vorheriger Stand: ${pick('safety')})`;
+      return a?.uploaded ? `Sicherung hochgeladen: ${pick('name')}` : `Sicherung angelegt: ${pick('name')}`;
     case 'demo_data':
       return r.action === 'create' ? 'Beispieldaten eingefügt' : 'Beispieldaten entfernt';
     default:

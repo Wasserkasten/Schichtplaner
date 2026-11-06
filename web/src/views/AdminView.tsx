@@ -9,9 +9,10 @@ import { HolidayAdmin } from './HolidayAdmin';
 import { SchoolHolidayAdmin } from './SchoolHolidayAdmin';
 import { PasswordLinkDialog, randomPassword, usernameSuggestion, type LinkInfo, type SupportContact } from '../components/PasswordLink';
 import { AuditLog } from './AuditLog';
+import { BackupAdmin } from './BackupAdmin';
 import { InfoView } from './InfoView';
 
-export type AdminTab = 'employees' | 'structure' | 'users' | 'types' | 'holidays' | 'school' | 'settings' | 'audit' | 'info';
+export type AdminTab = 'employees' | 'structure' | 'users' | 'types' | 'holidays' | 'school' | 'settings' | 'backups' | 'audit' | 'info';
 type Tab = AdminTab;
 
 export function AdminView({ initialTab = 'employees' }: { initialTab?: AdminTab }) {
@@ -26,6 +27,7 @@ export function AdminView({ initialTab = 'employees' }: { initialTab?: AdminTab 
     ['holidays', 'Feiertage', isAdmin],
     ['school', 'Ferien', isAdmin],
     ['settings', 'Einstellungen', isAdmin],
+    ['backups', 'Backups', isAdmin],
     ['audit', 'Protokoll', isAdmin],
     ['info', 'Info', isAdmin],
   ];
@@ -51,6 +53,7 @@ export function AdminView({ initialTab = 'employees' }: { initialTab?: AdminTab 
           <DemoData />
         </>
       )}
+      {tab === 'backups' && <BackupAdmin />}
       {tab === 'audit' && <AuditLog />}
       {tab === 'info' && <InfoView />}
     </div>
