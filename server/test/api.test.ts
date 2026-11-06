@@ -608,3 +608,19 @@ describe('Eintritt, Austritt, Planungsbeginn', () => {
     expect(boot.settings).toMatchObject({ planStart: '2026-10-01', dataStart: '2026-10-05' });
   });
 });
+
+describe('Leeren mit Auswahl', () => {
+  it('entfernt nur die gewählten Eintragsarten bzw. Notizen', async () => {
+    const admin = await login('admin');
+    const typeId = (code: string) => (db.prepare('SELECT id FROM entry_types WHERE code = ?').get(code) as { id: number }).id;
+    const cell = { employeeId: ids.eA, date: '2026-12-15' };
+    for (const c of ['F', 'B']) await app.inject({ method: 'POST', url: '/api/entries', headers: { cookie: admin }, payload: { ...cell, typeId: typeId(c) } });
+    await app.inject({ method: 'POST', url: '/api/entries', headers: { cookie: admin }, payload: { ...cell, text: 'Notiz' } });
+    const clear = (only: object) => app.inject({ method: 'POST', url: '/api/entries/bulk', headers: { cookie: admin }, payload: { action: 'clear', cells: [cell], only } });
+    expect((await clear({ typeIds: [typeId('B')] })).json().deleted).toHaveLength(1);
+    const left = () => (db.prepare("SELECT COALESCE(t.code, 'Notiz') c FROM entries e LEFT JOIN entry_types t ON t.id = e.type_id WHERE e.employee_id = ? AND e.date = '2026-12-15' ORDER BY c").all(ids.eA) as { c: string }[]).map((r) => r.c);
+    expect(left()).toEqual(['F', 'Notiz']);
+    await clear({ typeIds: [], notes: true });
+    expect(left()).toEqual(['F']);
+  });
+});

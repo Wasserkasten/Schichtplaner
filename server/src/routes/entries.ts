@@ -192,6 +192,8 @@ export async function entryRoutes(app: FastifyInstance, { db, hub }: AppContext)
     const body = z
       .object({
         action: z.enum(['set', 'add', 'clear']),
+        // nur bei 'clear': gezielt diese Eintragsarten bzw. Notizen (ohne Art) entfernen; ohne Angabe alles
+        only: z.object({ typeIds: z.array(z.number().int()).default([]), notes: z.boolean().default(false) }).optional(),
         cells: z.array(z.object({ employeeId: z.number().int(), date: isoDate })).min(1).max(MAX_BULK_CELLS),
         typeId: z.number().int().nullable().optional(),
         text,
@@ -229,7 +231,9 @@ export async function entryRoutes(app: FastifyInstance, { db, hub }: AppContext)
           }
         }
         const toDelete =
-          body.action === 'clear' ? existing : body.action === 'set' ? existing.filter((e) => e.type_id != null) : [];
+          body.action === 'clear'
+            ? existing.filter((e) => !body.only || (e.type_id != null ? body.only.typeIds.includes(e.type_id) : body.only.notes))
+            : body.action === 'set' ? existing.filter((e) => e.type_id != null) : [];
         // unverändert lassen, wenn die Zelle schon genau diesen Eintrag hat
         if (
           body.action === 'set' &&

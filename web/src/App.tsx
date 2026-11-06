@@ -14,6 +14,7 @@ import { ViewMenu } from './components/ViewMenu';
 import { PasswordDialog } from './components/PasswordDialog';
 import { Toasts } from './components/Toasts';
 import { ChangeHistoryMenu, ChangePopups } from './components/ChangeNotices';
+import { NoteTooltip } from './components/NoteTooltip';
 import { ImportantDialog, NewsDialog, type News } from './components/News';
 import { FONT_STEPS, applyFontScale, nextStep, saveFontScale } from './fontScale';
 import { reportError } from './helpers';
@@ -212,6 +213,7 @@ export function App() {
       )}
       {pwOpen && <PasswordDialog forced={boot.me.mustChangePassword} onClose={() => { setPwOpen(false); void store.loadBootstrap(); }} />}
       <ChangePopups />
+      <NoteTooltip />
       <Toasts />
     </div>
   );

@@ -6,6 +6,7 @@ import { blockedReason, fullName, minPlanDate, reportError, sortedTeams, teamLab
 import { EntryChip } from '../components/EntryChip';
 import { CellEditor } from '../components/CellEditor';
 import { CellContent, dayClass, holidayTitle } from './MonthView';
+import { YearPickerTitle } from '../components/MonthPicker';
 
 /** Jahreskalender pro Mitarbeiter: 12 Zeilen (Monate) × 31 Spalten (Tage) plus Auswertung. */
 export function YearView({ nav, setNav }: { nav: NavState; setNav: (n: NavState) => void }) {
@@ -47,7 +48,7 @@ export function YearView({ nav, setNav }: { nav: NavState; setNav: (n: NavState)
         <button onClick={() => setNav({ ...nav, date: `${year - 1}-01-01` })} aria-label="Vorjahr" disabled={year - 1 < Number(minPlanDate(boot, t).slice(0, 4))}>◀</button>
         <button onClick={() => setNav({ ...nav, date: t })}>Aktuelles Jahr</button>
         <button onClick={() => setNav({ ...nav, date: `${year + 1}-01-01` })} aria-label="Folgejahr">▶</button>
-        <h1>{year}</h1>
+        <YearPickerTitle year={year} minYear={Number(minPlanDate(boot, t).slice(0, 4))} onPick={(y) => setNav({ ...nav, date: `${y}-01-01` })} />
         <select value={emp.id} onChange={(e) => setNav({ ...nav, employeeId: Number(e.target.value) })}>
           {teams.map((tm) => (
             <optgroup key={tm.id} label={teamLabel(boot, tm.id)}>
