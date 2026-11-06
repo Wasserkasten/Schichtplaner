@@ -23,6 +23,7 @@ export function DayView({ nav, setNav }: { nav: NavState; setNav: (n: NavState) 
   const minDate = minPlanDate(boot, today());
   const teamName = new Map(boot.teams.map((t) => [t.id, teamLabel(boot, t.id)]));
   const holiday = st.holidayOn(date);
+  const schoolHoliday = st.schoolHolidayOn(date);
 
   // Pro Eintragsart sammeln
   const byType = new Map<number, { emp: Employee; e: Entry }[]>();
@@ -87,6 +88,7 @@ export function DayView({ nav, setNav }: { nav: NavState; setNav: (n: NavState) 
         <input type="date" value={date} min={minDate} onChange={(e) => e.target.value && setNav({ ...nav, date: e.target.value < minDate ? minDate : e.target.value })} />
         <h1>{fmtLong(date)}</h1>
         {holiday && <span className={holiday.kind === 'company' ? 'badge free' : 'badge'}>{holiday.name}{holiday.kind === 'company' ? ' · arbeitsfrei' : ''}</span>}
+        {schoolHoliday && <span className="badge sf">{schoolHoliday.name} (Schulferien)</span>}
       </div>
       <div className="day-columns">
         {section('shift', 'Im Dienst')}

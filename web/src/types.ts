@@ -58,6 +58,9 @@ export interface Entry {
   masked?: boolean;
 }
 /** public = gesetzlicher Feiertag, company = betrieblich arbeitsfreier Tag (z. B. Heiligabend) */
+/** Schulferien-Zeitraum */
+export interface SchoolHoliday { id: number; start: string; end: string; name: string; state: string | null; fromSource: boolean }
+
 export interface Holiday { id: number; date: string; name: string; kind: 'public' | 'company'; fromSource: boolean }
 export interface Bootstrap {
   me: Me;

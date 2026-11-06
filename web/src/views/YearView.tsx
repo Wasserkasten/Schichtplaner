@@ -98,12 +98,13 @@ export function YearView({ nav, setNav }: { nav: NavState; setNav: (n: NavState)
                   if (i + 1 > daysInMonth(year, m)) return <td key={i} className="void" />;
                   const date = iso(new Date(Date.UTC(year, m, i + 1)));
                   const h = st.holidayOn(date);
+                  const sf = st.schoolHolidayOn(date);
                   const blocked = blockedReason(boot, emp, date);
                   return (
                     <td
                       key={i}
-                      className={`${dayClass(date, t, h)} cell${blocked ? ' outside' : ' editable'}`}
-                      title={blocked ? `Kein Eintrag möglich: ${blocked}` : `${WEEKDAYS[weekday(date)]}${h ? ' · ' + holidayTitle(h) : ''}`}
+                      className={`${dayClass(date, t, h)} cell${blocked ? ' outside' : ' editable'}${sf ? ' sf' : ''}`}
+                      title={blocked ? `Kein Eintrag möglich: ${blocked}` : `${WEEKDAYS[weekday(date)]}${h ? ' · ' + holidayTitle(h) : ''}${sf ? ` · ${sf.name}` : ''}`}
                       onClick={() => (!blocked || st.cell(emp.id, date).length > 0) && setEditing(date)}
                     >
                       <CellContent entries={st.cell(emp.id, date)} types={types} />

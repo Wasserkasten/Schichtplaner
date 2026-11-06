@@ -6,11 +6,12 @@ import { departmentName, fullName, reportError, sortedTeams, teamLabel, teamsByD
 import type { Employee, EntryType, Level } from '../types';
 import { Modal } from '../components/Modal';
 import { HolidayAdmin } from './HolidayAdmin';
+import { SchoolHolidayAdmin } from './SchoolHolidayAdmin';
 import { PasswordLinkDialog, randomPassword, usernameSuggestion, type LinkInfo, type SupportContact } from '../components/PasswordLink';
 import { AuditLog } from './AuditLog';
 import { InfoView } from './InfoView';
 
-export type AdminTab = 'employees' | 'structure' | 'users' | 'types' | 'holidays' | 'settings' | 'audit' | 'info';
+export type AdminTab = 'employees' | 'structure' | 'users' | 'types' | 'holidays' | 'school' | 'settings' | 'audit' | 'info';
 type Tab = AdminTab;
 
 export function AdminView({ initialTab = 'employees' }: { initialTab?: AdminTab }) {
@@ -23,6 +24,7 @@ export function AdminView({ initialTab = 'employees' }: { initialTab?: AdminTab 
     ['users', 'Benutzer & Rechte', isAdmin],
     ['types', 'An-/Abwesenheitsarten', isAdmin],
     ['holidays', 'Feiertage', isAdmin],
+    ['school', 'Ferien', isAdmin],
     ['settings', 'Einstellungen', isAdmin],
     ['audit', 'Protokoll', isAdmin],
     ['info', 'Info', isAdmin],
@@ -41,6 +43,7 @@ export function AdminView({ initialTab = 'employees' }: { initialTab?: AdminTab 
       {tab === 'users' && <Users />}
       {tab === 'types' && <Types />}
       {tab === 'holidays' && <HolidayAdmin stateName={(c) => STATES[c] ?? c} />}
+      {tab === 'school' && <SchoolHolidayAdmin states={STATES} />}
       {tab === 'settings' && (
         <>
           <Settings />

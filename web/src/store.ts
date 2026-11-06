@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { get, post } from './api';
 import { describeEntries, type ChangeParts } from './describe';
-import type { Bootstrap, Entry, Holiday } from './types';
+import type { Bootstrap, Entry, Holiday, SchoolHoliday } from './types';
 
 type Listener = () => void;
 
@@ -170,6 +170,30 @@ class Store {
     this.emit();
   }
 
+  /** Schulferien je Jahr (Zeiträume, die das Jahr berühren) */
+  schoolHolidays = new Map<number, SchoolHoliday[]>();
+  schoolHolidayState = '';
+
+  async loadSchoolHolidays(year: number) {
+    if (this.schoolHolidays.has(year)) return;
+    this.schoolHolidays.set(year, []);
+    try {
+      const r = await get<{ state: string; periods: SchoolHoliday[] }>(`/api/school-holidays?year=${year}`);
+      this.schoolHolidays.set(year, r.periods);
+      this.schoolHolidayState = r.state;
+      this.emit();
+    } catch {
+      this.schoolHolidays.delete(year);
+    }
+  }
+
+  /** Schulferien an diesem Tag (oder undefined). */
+  schoolHolidayOn(date: string): SchoolHoliday | undefined {
+    const y = Number(date.slice(0, 4));
+    if (!this.schoolHolidays.has(y)) void this.loadSchoolHolidays(y);
+    return this.schoolHolidays.get(y)?.find((p) => p.start <= date && p.end >= date);
+  }
+
   holidayOn(date: string): Holiday | undefined {
     const y = Number(date.slice(0, 4));
     if (!this.holidays.has(y)) void this.loadHolidays(y);
@@ -231,6 +255,7 @@ class Store {
     });
     es.addEventListener('holidays', () => {
       this.holidays.clear(); // werden beim nächsten Zeichnen neu geladen
+      this.schoolHolidays.clear();
       this.emit();
     });
     es.addEventListener('masterdata', (ev) => {

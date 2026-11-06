@@ -644,3 +644,38 @@ describe('Änderungen an meinem Plan', () => {
     expect((await app.inject({ method: 'GET', url: '/api/me/changes', headers: { cookie: lead } })).json().hasEmployee).toBe(false);
   });
 });
+
+describe('Schulferien', () => {
+  const sample = [
+    { startDate: '2025-12-22', endDate: '2026-01-06', name: [{ language: 'DE', text: 'Weihnachtsferien' }] },
+    { startDate: '2026-10-17', endDate: '2026-10-31', name: [{ language: 'DE', text: 'Herbstferien' }] },
+  ];
+  it('aus der Quelle laden, übernehmen, bearbeiten; für alle lesbar', async () => {
+    const { vi } = await import('vitest');
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', async (url: string) => { calls.push(url); return new Response(JSON.stringify(sample), { status: 200 }); });
+    try {
+      const admin = await login('admin');
+      const src = (await app.inject({ method: 'GET', url: '/api/admin/school-holidays/source?year=2026&state=BY', headers: { cookie: admin } })).json();
+      expect(calls[0]).toContain('subdivisionCode=DE-BY');
+      expect(src.items.map((i: { name: string; status: string }) => `${i.name}:${i.status}`)).toEqual(['Weihnachtsferien:missing', 'Herbstferien:missing']);
+      await app.inject({ method: 'POST', url: '/api/admin/school-holidays/import', headers: { cookie: admin }, payload: { state: 'BY', items: src.items.map((i: object) => i) } });
+      const again = (await app.inject({ method: 'GET', url: '/api/admin/school-holidays/source?year=2026&state=BY', headers: { cookie: admin } })).json();
+      expect(again.items.every((i: { status: string }) => i.status === 'present')).toBe(true);
+      // eigener Zeitraum und für alle lesbar (inkl. Jahreswechsel)
+      await app.inject({ method: 'POST', url: '/api/admin/school-holidays', headers: { cookie: admin }, payload: { start: '2026-05-15', end: '2026-05-15', name: 'Beweglicher Ferientag' } });
+      const anna = await login('anna');
+      const y25 = (await app.inject({ method: 'GET', url: '/api/school-holidays?year=2025', headers: { cookie: anna } })).json();
+      expect(y25.periods.map((p: { name: string }) => p.name)).toEqual(['Weihnachtsferien']);
+      expect((await app.inject({ method: 'GET', url: '/api/school-holidays?year=2026', headers: { cookie: anna } })).json().periods).toHaveLength(3);
+      expect((await app.inject({ method: 'POST', url: '/api/admin/school-holidays', headers: { cookie: anna }, payload: { start: '2026-01-01', end: '2026-01-02', name: 'x' } })).statusCode).toBe(403);
+      // Quelle nicht erreichbar -> verständliche Meldung
+      vi.stubGlobal('fetch', async () => { throw new Error('getaddrinfo ENOTFOUND'); });
+      const down = await app.inject({ method: 'GET', url: '/api/admin/school-holidays/source?year=2026', headers: { cookie: admin } });
+      expect(down.statusCode).toBe(502);
+      expect(down.json().error).toContain('nicht erreichbar');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});

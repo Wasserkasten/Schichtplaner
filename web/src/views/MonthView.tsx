@@ -281,8 +281,9 @@ export function MonthView({ nav, setNav }: { nav: NavState; setNav: (n: NavState
               <th className="sticky-col">Mitarbeiter</th>
               {days.map((d) => {
                 const h = st.holidayOn(d);
+                const sf = st.schoolHolidayOn(d);
                 return (
-                  <th key={d} className={dayClass(d, t, h)} title={holidayTitle(h)}>
+                  <th key={d} className={`${dayClass(d, t, h)}${sf ? ' sf' : ''}`} title={[holidayTitle(h), sf && `${sf.name} (Schulferien)`].filter(Boolean).join(' · ') || undefined}>
                     <button className="daylink" onClick={() => setNav({ ...nav, kind: 'day', date: d })}>
                       <span className="wd">{WEEKDAYS[weekday(d)]}</span>
                       <span className="dn">{d.slice(8)}</span>
@@ -469,6 +470,7 @@ export function Legend() {
     <div className="legend">
       <span><span className="swatch hol" /> Feiertag</span>
       <span><span className="swatch hol free" /> arbeitsfreier Tag</span>
+      <span><span className="swatch sf-swatch" /> Schulferien</span>
       <span><span className="swatch note-swatch" /> Notiz / Text</span>
       <span><span className="swatch outside-swatch" /> nicht beschäftigt</span>
       {boot!.entryTypes
