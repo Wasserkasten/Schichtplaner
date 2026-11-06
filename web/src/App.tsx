@@ -18,6 +18,7 @@ import { NoteTooltip } from './components/NoteTooltip';
 import { ImportantDialog, NewsDialog, type News } from './components/News';
 import { applyFontScale, applyTheme } from './fontScale';
 import { ProfileDialog } from './components/ProfileDialog';
+import { MyChangesDialog } from './components/MyChanges';
 import { reportError } from './helpers';
 
 export type Kind = ViewConfig['kind'] | 'admin';
@@ -51,6 +52,9 @@ export function App() {
   const [views, setViews] = useState<SavedView[]>([]);
   const [pwOpen, setPwOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [myChangesOpen, setMyChangesOpen] = useState(false);
+  // Änderungen anderer am eigenen Plan seit dem letzten Besuch (Hinweis nach der Anmeldung)
+  const [foreign, setForeign] = useState<{ count: number; users: string[] } | null>(null);
   const [linkToken, setLinkToken] = useState<string | null>(() => /^#\/passwort\/([\w-]{10,})/.exec(location.hash)?.[1] ?? null);
   const [adminTab, setAdminTab] = useState<AdminTab | undefined>(undefined);
   const [news, setNews] = useState<News | null>(null);
@@ -68,6 +72,7 @@ export function App() {
       else if (!nav.employeeId) setNav((n) => ({ ...n, employeeId: boot.me.employeeId ?? boot.employees[0]?.id ?? null }));
       store.connect();
       get<News>('/api/news').then(setNews, () => {});
+      if (boot.me.employeeId && boot.me.notifyChanges) get<{ count: number; users: string[] }>('/api/me/changes/summary').then(setForeign, () => {});
       setState('ready');
       if (boot.me.mustChangePassword) setPwOpen(true);
     } catch (e) {
@@ -179,13 +184,22 @@ export function App() {
           ●
         </span>
         <details className="usermenu">
-          <summary>{boot.me.displayName}</summary>
+          <summary>
+            {boot.me.displayName}
+            {(foreign?.count ?? 0) + st.foreignChanges > 0 && <span className="count-badge" title="Änderungen anderer an deinem Plan">{(foreign?.count ?? 0) + st.foreignChanges}</span>}
+          </summary>
           <div className="menu" onClick={(e) => (e.target as HTMLElement).closest('button') && (e.currentTarget.parentElement as HTMLDetailsElement).removeAttribute('open')}>
             <div className="menu-head">
               <div className="strong">{boot.me.displayName}</div>
               <div className="small muted">{boot.me.username}</div>
             </div>
             <button onClick={() => setProfileOpen(true)}>👤 Profil & Einstellungen</button>
+            {boot.me.employeeId && (
+              <button onClick={() => setMyChangesOpen(true)}>
+                📝 Änderungen an meinem Plan
+                {(foreign?.count ?? 0) + st.foreignChanges > 0 && <span className="count-badge">{(foreign?.count ?? 0) + st.foreignChanges}</span>}
+              </button>
+            )}
             <button onClick={() => setNewsOpen('recent')}>📣 Neuigkeiten</button>
             {canAdmin && (
               <>
@@ -214,6 +228,14 @@ export function App() {
           <button className="icon" aria-label="Hinweis schließen" onClick={newsSeen}>✕</button>
         </div>
       )}
+      {foreign && foreign.count > 0 && (
+        <div className="info-banner" role="status">
+          {foreign.users.length ? foreign.users.join(', ') : 'Jemand'} {foreign.users.length > 1 ? 'haben' : 'hat'} seit deinem letzten Besuch{' '}
+          <strong>{foreign.count === 1 ? 'eine Änderung' : `${foreign.count} Änderungen`}</strong> an deinem Plan vorgenommen.
+          <button className="link" onClick={() => setMyChangesOpen(true)}>Anzeigen</button>
+          <button className="icon" aria-label="Hinweis schließen" onClick={() => { setForeign(null); post('/api/me/changes/seen').catch(() => {}); store.resetForeignChanges(); }}>✕</button>
+        </div>
+      )}
       <main>
         {nav.kind === 'month' && <MonthView nav={nav} setNav={setNav} />}
         {nav.kind === 'day' && <DayView nav={nav} setNav={setNav} />}
@@ -229,6 +251,12 @@ export function App() {
       )}
       {!pwOpen && news && news.important.length > 0 && (
         <ImportantDialog notes={news.important} onDone={() => setNews({ ...news, important: [] })} />
+      )}
+      {myChangesOpen && (
+        <MyChangesDialog
+          onClose={() => setMyChangesOpen(false)}
+          onSeen={() => { setForeign(null); store.resetForeignChanges(); }}
+        />
       )}
       {profileOpen && <ProfileDialog onClose={() => setProfileOpen(false)} onPassword={() => { setProfileOpen(false); setPwOpen(true); }} />}
       {pwOpen && <PasswordDialog forced={boot.me.mustChangePassword} onClose={() => { setPwOpen(false); void store.loadBootstrap(); }} />}

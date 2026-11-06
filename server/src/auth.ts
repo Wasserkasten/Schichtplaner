@@ -12,6 +12,8 @@ export interface UserRow {
   must_change_password: number;
   font_scale: number;
   theme: 'auto' | 'light' | 'dark';
+  changes_seen_id: number | null;
+  notify_changes: number;
   seen_version: string | null;
   ack_version: string | null;
 }

@@ -6,7 +6,7 @@ import { reportError } from '../helpers';
 import type { Bootstrap, Entry } from '../types';
 import { CellEditor } from '../components/CellEditor';
 
-interface Row {
+export interface Row {
   id: number;
   ts: string;
   user_id: number | null;
@@ -25,7 +25,7 @@ interface Row {
 }
 interface Page { rows: Row[]; undone: string[]; nextBeforeId: number | null }
 
-interface Group {
+export interface Group {
   key: string;
   rows: Row[];
   first: Row;
@@ -94,8 +94,29 @@ function describeGroup(boot: Bootstrap, rows: Row[]): string {
   return first.undo_of ? `Rückgängig gemacht: ${text}` : text;
 }
 
+/** Protokollzeilen zu Änderungen zusammenfassen (gleiche change_id = eine Aktion). */
+export function buildGroups(boot: Bootstrap, rows: Row[]): Group[] {
+  const map = new Map<string, Row[]>();
+  for (const r of rows) {
+    const k = r.change_id ?? `row-${r.id}`;
+    map.set(k, [...(map.get(k) ?? []), r]);
+  }
+  return [...map.entries()].map(([key, rs]) => {
+    const cells = new Set(rs.filter((r) => r.employee_id && r.date).map((r) => `${r.employee_id}|${r.date}`));
+    const [emp, date] = cells.size === 1 ? [...cells][0].split('|') : [];
+    return {
+      key,
+      rows: rs,
+      first: rs[0],
+      text: describeGroup(boot, rs),
+      isEntry: rs[0].entity === 'entry',
+      cell: emp ? { employeeId: Number(emp), date } : null,
+    };
+  });
+}
+
 /** Eine Zeile der Details: einzelner Eintrag mit Vorher/Nachher. */
-function detail(boot: Bootstrap, r: Row): string {
+export function detail(boot: Bootstrap, r: Row): string {
   const b = parse<EntryLike>(r.before_json);
   const a = parse<EntryLike>(r.after_json);
   const who = r.employee_last ? `${r.employee_last}, ${r.employee_first}` : `#${r.employee_id}`;
@@ -131,25 +152,7 @@ export function AuditLog() {
   }
   useEffect(() => void load(), []);
 
-  const groups = useMemo<Group[]>(() => {
-    const map = new Map<string, Row[]>();
-    for (const r of rows) {
-      const k = r.change_id ?? `row-${r.id}`;
-      map.set(k, [...(map.get(k) ?? []), r]);
-    }
-    return [...map.entries()].map(([key, rs]) => {
-      const cells = new Set(rs.filter((r) => r.employee_id && r.date).map((r) => `${r.employee_id}|${r.date}`));
-      const [emp, date] = cells.size === 1 ? [...cells][0].split('|') : [];
-      return {
-        key,
-        rows: rs,
-        first: rs[0],
-        text: describeGroup(boot, rs),
-        isEntry: rs[0].entity === 'entry',
-        cell: emp ? { employeeId: Number(emp), date } : null,
-      };
-    });
-  }, [rows, boot]);
+  const groups = useMemo<Group[]>(() => buildGroups(boot, rows), [rows, boot]);
 
   const q = search.trim().toLowerCase();
   const shown = groups.filter(

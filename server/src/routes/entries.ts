@@ -53,7 +53,7 @@ export async function entryRoutes(app: FastifyInstance, { db, hub }: AppContext)
     if (!t || !t.active) throw new HttpError(400, 'Unbekannte oder inaktive Eintragsart');
   }
 
-  function publish(action: 'upsert' | 'delete', rows: EntryRow[], userId: number) {
+  function publish(action: 'upsert' | 'delete', rows: EntryRow[], userId: number, changeId?: string) {
     if (rows.length === 0) return;
     const ec = new EntryContext(db);
     hub.broadcast('entries', (perms) => {
@@ -61,7 +61,7 @@ export async function entryRoutes(app: FastifyInstance, { db, hub }: AppContext)
         action === 'delete'
           ? rows.filter((r) => ec.present(r, perms) !== null).map((r) => ({ id: r.id }))
           : rows.map((r) => ec.present(r, perms)).filter((e) => e !== null);
-      return items.length ? { action, by: userId, items } : null;
+      return items.length ? { action, by: userId, changeId, items } : null;
     });
   }
 
@@ -112,7 +112,7 @@ export async function entryRoutes(app: FastifyInstance, { db, hub }: AppContext)
       if (reason) throw new HttpError(422, `Nicht möglich: ${reason}.`);
       return insert(user.id, body, changeId);
     })();
-    publish('upsert', [row], user.id);
+    publish('upsert', [row], user.id, changeId);
     return { ...toDTO(row), changeId };
   });
 
@@ -156,9 +156,9 @@ export async function entryRoutes(app: FastifyInstance, { db, hub }: AppContext)
       return { updated, cur };
     })();
     if (row.cur.employee_id !== row.updated.employee_id || row.cur.date !== row.updated.date) {
-      publish('delete', [row.cur], user.id);
+      publish('delete', [row.cur], user.id, changeId);
     }
-    publish('upsert', [row.updated], user.id);
+    publish('upsert', [row.updated], user.id, changeId);
     return { ...toDTO(row.updated), changeId };
   });
 
@@ -177,7 +177,7 @@ export async function entryRoutes(app: FastifyInstance, { db, hub }: AppContext)
       remove(user.id, cur, changeId);
       return cur;
     })();
-    publish('delete', [cur], user.id);
+    publish('delete', [cur], user.id, changeId);
     return { ok: true, changeId };
   });
 
@@ -263,8 +263,8 @@ export async function entryRoutes(app: FastifyInstance, { db, hub }: AppContext)
       return { created, deleted, skipped, outside };
     })();
 
-    publish('delete', result.deleted, user.id);
-    publish('upsert', result.created, user.id);
+    publish('delete', result.deleted, user.id, changeId);
+    publish('upsert', result.created, user.id, changeId);
     return { created: result.created.map(toDTO), deleted: result.deleted.map((d) => d.id), skipped: result.skipped, outside: result.outside, changeId };
   });
 
@@ -370,8 +370,8 @@ export async function entryRoutes(app: FastifyInstance, { db, hub }: AppContext)
       return { upserted: [...upserted.values()], deleted };
     })();
 
-    publish('delete', result.deleted, user.id);
-    publish('upsert', result.upserted, user.id);
+    publish('delete', result.deleted, user.id, undoId);
+    publish('upsert', result.upserted, user.id, undoId);
     return { changeId: undoId, upserted: result.upserted.map(toDTO), deleted: result.deleted.map((d) => d.id) };
   });
 

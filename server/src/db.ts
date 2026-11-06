@@ -47,6 +47,9 @@ function migrate(db: DB): void {
   if (!has('employees', 'exit_date')) db.exec('ALTER TABLE employees ADD COLUMN exit_date TEXT');
   // Darstellung je Benutzer: auto (wie System) | light | dark
   if (!has('users', 'theme')) db.exec("ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'auto'");
+  // Benachrichtigung über Änderungen anderer am eigenen Plan: bis zu welcher Protokollzeile informiert
+  if (!has('users', 'changes_seen_id')) db.exec('ALTER TABLE users ADD COLUMN changes_seen_id INTEGER');
+  if (!has('users', 'notify_changes')) db.exec('ALTER TABLE users ADD COLUMN notify_changes INTEGER NOT NULL DEFAULT 1');
   if (!has('users', 'seen_version')) db.exec('ALTER TABLE users ADD COLUMN seen_version TEXT');
   if (!has('users', 'ack_version')) db.exec('ALTER TABLE users ADD COLUMN ack_version TEXT');
   // Neue Konten sollen keine alten Neuigkeiten sehen: beim Anlegen auf die laufende Version setzen

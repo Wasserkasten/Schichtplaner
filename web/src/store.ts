@@ -31,6 +31,10 @@ class Store {
   live = false;
   toasts: { id: number; text: string; kind: 'info' | 'error' }[] = [];
   notices: ChangeNotice[] = [];
+  /** Änderungen anderer am eigenen Plan, seit der Hinweis zuletzt gelesen wurde (Live-Zähler) */
+  foreignChanges = 0;
+  private foreignToastAt = 0;
+  private foreignChangeIds = new Set<string>();
 
   private version = 0;
   private cellIndex: Map<string, Entry[]> | null = null;
@@ -92,6 +96,25 @@ class Store {
       this.patchNotice(id, { state: wasDone ? 'done' : 'undone' });
       this.toast((e as Error).message, 'error');
     }
+  }
+
+  private noteForeignChange(by: number, changeId?: string) {
+    // „gelöscht“ + „angelegt“ derselben Aktion nur einmal zählen
+    if (changeId && this.foreignChangeIds.has(changeId)) return;
+    if (changeId) this.foreignChangeIds.add(changeId);
+    this.foreignChanges++;
+    // nicht bei jedem Pinselstrich einzeln melden
+    if (Date.now() - this.foreignToastAt > 30_000) {
+      this.foreignToastAt = Date.now();
+      const name = this.boot?.users.find((u) => u.id === by)?.displayName ?? 'Jemand';
+      this.toast(`${name} hat gerade deinen Plan geändert – Details unter „Änderungen an meinem Plan“.`);
+    }
+    this.emit();
+  }
+
+  resetForeignChanges() {
+    this.foreignChanges = 0;
+    this.emit();
   }
 
   dismissNotice(id: number) {
@@ -196,7 +219,13 @@ class Store {
       if (wasOffline) this.reloadRanges();
     });
     es.addEventListener('entries', (ev) => {
-      const msg = JSON.parse((ev as MessageEvent).data) as { action: 'upsert' | 'delete'; items: Entry[] };
+      const msg = JSON.parse((ev as MessageEvent).data) as { action: 'upsert' | 'delete'; by?: number; changeId?: string; items: Entry[] };
+      // jemand anderes ändert gerade meinen Plan -> kurz Bescheid geben (gelöschte Einträge kennen wir vor dem Entfernen)
+      const me = this.boot?.me;
+      if (me?.employeeId && msg.by && msg.by !== me.id) {
+        const mine = msg.action === 'upsert' ? msg.items.some((i) => i.employeeId === me.employeeId) : msg.items.some((i) => this.entries.get(i.id)?.employeeId === me.employeeId);
+        if (mine) this.noteForeignChange(msg.by, msg.changeId);
+      }
       if (msg.action === 'upsert') this.upsert(msg.items);
       else this.remove(msg.items.map((i) => i.id));
     });

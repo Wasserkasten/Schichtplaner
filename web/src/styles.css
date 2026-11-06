@@ -382,3 +382,9 @@ details > summary.plain::after { content: ''; }
 .seg button { border: 0; border-radius: 0; padding: 6px 12px; }
 .seg button + button { border-left: 1px solid var(--line-strong); }
 .seg button.active { background: var(--accent); color: var(--on-accent); }
+
+/* Hinweis auf Änderungen anderer */
+.info-banner { display: flex; align-items: center; gap: 10px; background: var(--accent-soft); color: var(--text); padding: 6px 12px; border-bottom: 1px solid var(--line); }
+.info-banner .icon { margin-left: auto; }
+.info-banner .link { color: var(--accent); text-decoration: underline; }
+table.simple tr.fresh td { background: var(--today); }

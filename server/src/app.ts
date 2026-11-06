@@ -15,6 +15,7 @@ import { viewRoutes } from './routes/views.js';
 import { holidayRoutes } from './routes/holidays.js';
 import { pdfRoutes } from './routes/pdf.js';
 import { infoRoutes } from './routes/info.js';
+import { meRoutes } from './routes/me.js';
 import { APP_VERSION } from './version.js';
 
 declare module 'fastify' {
@@ -104,6 +105,7 @@ export async function buildApp(opts: {
     await holidayRoutes(api, ctx);
     await pdfRoutes(api, ctx);
     await infoRoutes(api, ctx);
+    await meRoutes(api, ctx);
   });
 
   if (opts.staticDir && existsSync(opts.staticDir)) {

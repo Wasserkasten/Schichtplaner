@@ -624,3 +624,23 @@ describe('Leeren mit Auswahl', () => {
     expect(left()).toEqual(['F']);
   });
 });
+
+describe('Änderungen an meinem Plan', () => {
+  it('meldet Änderungen anderer seit dem letzten Besuch und listet das eigene Protokoll', async () => {
+    const anna = await login('anna');
+    const lead = await login('lead');
+    const summary = async () => (await app.inject({ method: 'GET', url: '/api/me/changes/summary', headers: { cookie: anna } })).json();
+    expect(await summary()).toEqual({ count: 0, users: [] }); // erster Aufruf setzt nur den Startpunkt
+    // eigene Änderung zählt nicht, die der Teamleitung (Pinsel über 2 Tage = 1 Änderung) schon
+    await app.inject({ method: 'POST', url: '/api/entries', headers: { cookie: anna }, payload: { employeeId: ids.eA, date: '2026-12-01', typeId: ids.typeF } });
+    await app.inject({ method: 'POST', url: '/api/entries/bulk', headers: { cookie: lead }, payload: { action: 'set', typeId: ids.typeK, cells: ['2026-12-02', '2026-12-03'].map((date) => ({ employeeId: ids.eA, date })) } });
+    expect(await summary()).toEqual({ count: 1, users: ['Lead'] });
+    const list = (await app.inject({ method: 'GET', url: '/api/me/changes', headers: { cookie: anna } })).json();
+    expect(list.rows.map((r: { user_name: string }) => r.user_name)).toEqual(['Lead', 'Lead', 'Anna']);
+    expect(list.rows[0].id).toBeGreaterThan(list.seenId); // als neu erkennbar
+    await app.inject({ method: 'POST', url: '/api/me/changes/seen', headers: { cookie: anna } });
+    expect((await summary()).count).toBe(0);
+    // Benutzer ohne verknüpften Mitarbeiter
+    expect((await app.inject({ method: 'GET', url: '/api/me/changes', headers: { cookie: lead } })).json().hasEmployee).toBe(false);
+  });
+});

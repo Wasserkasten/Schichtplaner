@@ -1,6 +1,7 @@
 import { useStore, store } from '../store';
 import { FONT_STEPS, nextStep, saveFontScale, saveTheme, type Theme } from '../fontScale';
 import { reportError, teamLabel } from '../helpers';
+import { put } from '../api';
 import { Modal } from './Modal';
 
 const LEVEL: Record<string, string> = { view: 'ansehen', edit: 'bearbeiten', manage: 'verwalten' };
@@ -54,6 +55,17 @@ export function ProfileDialog({ onClose, onPassword }: { onClose: () => void; on
           </div>
           <p className="small muted">„Automatisch“ folgt der Einstellung des Geräts (z. B. abends dunkel).</p>
         </section>
+
+        {me.employeeId && (
+          <section>
+            <h3>Benachrichtigungen</h3>
+            <label className="inline">
+              <input type="checkbox" checked={me.notifyChanges} onChange={(e) => void save(() => put('/api/me/preferences', { notifyChanges: e.target.checked }))} />
+              nach der Anmeldung informieren, wenn andere meinen Plan geändert haben
+            </label>
+            <p className="small muted">Alle Änderungen stehen unabhängig davon unter „Änderungen an meinem Plan“.</p>
+          </section>
+        )}
 
         <section>
           <h3>Schriftgröße</h3>

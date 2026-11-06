@@ -11,6 +11,8 @@ export interface Me {
   fontScale: number;
   /** Darstellung: auto (wie System) | light | dark */
   theme: 'auto' | 'light' | 'dark';
+  /** bei Anmeldung über Änderungen anderer am eigenen Plan informieren */
+  notifyChanges: boolean;
 }
 export interface Department { id: number; name: string; sortOrder: number }
 export interface Team { id: number; departmentId: number; name: string; sortOrder: number; level: Level }
