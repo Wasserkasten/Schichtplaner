@@ -16,7 +16,8 @@ import { Toasts } from './components/Toasts';
 import { ChangeHistoryMenu, ChangePopups } from './components/ChangeNotices';
 import { NoteTooltip } from './components/NoteTooltip';
 import { ImportantDialog, NewsDialog, type News } from './components/News';
-import { FONT_STEPS, applyFontScale, nextStep, saveFontScale } from './fontScale';
+import { applyFontScale, applyTheme } from './fontScale';
+import { ProfileDialog } from './components/ProfileDialog';
 import { reportError } from './helpers';
 
 export type Kind = ViewConfig['kind'] | 'admin';
@@ -49,6 +50,7 @@ export function App() {
   const [nav, setNav] = useState<NavState>({ kind: 'month', date: today(), teamIds: [], employeeId: null, days: 0, ...fromHash() });
   const [views, setViews] = useState<SavedView[]>([]);
   const [pwOpen, setPwOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [linkToken, setLinkToken] = useState<string | null>(() => /^#\/passwort\/([\w-]{10,})/.exec(location.hash)?.[1] ?? null);
   const [adminTab, setAdminTab] = useState<AdminTab | undefined>(undefined);
   const [news, setNews] = useState<News | null>(null);
@@ -58,6 +60,7 @@ export function App() {
     try {
       const boot = await store.loadBootstrap();
       applyFontScale(boot.me.fontScale ?? 1);
+      applyTheme(boot.me.theme ?? 'auto');
       const v = await get<SavedView[]>('/api/views');
       setViews(v);
       const def = v.find((x) => x.isDefault);
@@ -144,15 +147,21 @@ export function App() {
   );
 
   return (
-    <div className="app">
+    <div className={nav.kind === 'admin' ? 'app admin-mode' : 'app'}>
       <header className="topbar">
         <div className="brand">Schichtplaner</div>
-        <nav className="tabs">
-          {tab('month', 'Kalender')}
-          {tab('day', 'Tag')}
-          {tab('year', 'Jahr')}
-          {canAdmin && tab('admin', 'Verwaltung')}
-        </nav>
+        {nav.kind === 'admin' ? (
+          <nav className="tabs">
+            <span className="admin-label">⚙ Verwaltung</span>
+            <button className="back-to-plan" onClick={() => setNav({ ...nav, kind: 'month' })}>← Zurück zum Plan</button>
+          </nav>
+        ) : (
+          <nav className="tabs">
+            {tab('month', 'Kalender')}
+            {tab('day', 'Tag')}
+            {tab('year', 'Jahr')}
+          </nav>
+        )}
         {nav.kind !== 'admin' && nav.kind !== 'year' && (
           <TeamFilter value={nav.teamIds} onChange={(teamIds) => setNav({ ...nav, teamIds })} />
         )}
@@ -171,11 +180,21 @@ export function App() {
         </span>
         <details className="usermenu">
           <summary>{boot.me.displayName}</summary>
-          <div className="menu">
-            <button onClick={() => setNewsOpen('recent')}>Neuigkeiten</button>
-            <button onClick={() => setPwOpen(true)}>Passwort ändern</button>
+          <div className="menu" onClick={(e) => (e.target as HTMLElement).closest('button') && (e.currentTarget.parentElement as HTMLDetailsElement).removeAttribute('open')}>
+            <div className="menu-head">
+              <div className="strong">{boot.me.displayName}</div>
+              <div className="small muted">{boot.me.username}</div>
+            </div>
+            <button onClick={() => setProfileOpen(true)}>👤 Profil & Einstellungen</button>
+            <button onClick={() => setNewsOpen('recent')}>📣 Neuigkeiten</button>
+            {canAdmin && (
+              <>
+                <div className="menu-sep" />
+                <button onClick={() => { setAdminTab(undefined); setNav({ ...nav, kind: 'admin' }); }}>⚙ Verwaltung</button>
+              </>
+            )}
+            <div className="menu-sep" />
             <button onClick={() => void logout()}>Abmelden</button>
-            <FontSizeControl value={boot.me.fontScale} />
           </div>
         </details>
       </header>
@@ -211,32 +230,11 @@ export function App() {
       {!pwOpen && news && news.important.length > 0 && (
         <ImportantDialog notes={news.important} onDone={() => setNews({ ...news, important: [] })} />
       )}
+      {profileOpen && <ProfileDialog onClose={() => setProfileOpen(false)} onPassword={() => { setProfileOpen(false); setPwOpen(true); }} />}
       {pwOpen && <PasswordDialog forced={boot.me.mustChangePassword} onClose={() => { setPwOpen(false); void store.loadBootstrap(); }} />}
       <ChangePopups />
       <NoteTooltip />
       <Toasts />
-    </div>
-  );
-}
-
-/** Schriftgröße im Benutzermenü: gilt für dieses Benutzerkonto auf allen Geräten. */
-function FontSizeControl({ value }: { value: number }) {
-  const set = async (v: number) => {
-    try {
-      await saveFontScale(v);
-      await store.loadBootstrap();
-    } catch (e) {
-      reportError(e);
-    }
-  };
-  const min = FONT_STEPS[0];
-  const max = FONT_STEPS[FONT_STEPS.length - 1];
-  return (
-    <div className="fontsize" title="Schriftgröße – gilt für dein Konto auf allen Geräten">
-      <span className="small">Schrift</span>
-      <button aria-label="Schrift kleiner" disabled={value <= min} onClick={() => void set(nextStep(value, -1))}>A−</button>
-      <button className="val" aria-label="Schriftgröße zurücksetzen" title="auf 100 % zurücksetzen" onClick={() => void set(1)}>{Math.round(value * 100)} %</button>
-      <button aria-label="Schrift größer" disabled={value >= max} onClick={() => void set(nextStep(value, 1))}>A+</button>
     </div>
   );
 }

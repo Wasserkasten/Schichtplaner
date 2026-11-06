@@ -9,6 +9,8 @@ export interface Me {
   mustChangePassword: boolean;
   /** persönliche Schriftgröße, 1 = 100 % */
   fontScale: number;
+  /** Darstellung: auto (wie System) | light | dark */
+  theme: 'auto' | 'light' | 'dark';
 }
 export interface Department { id: number; name: string; sortOrder: number }
 export interface Team { id: number; departmentId: number; name: string; sortOrder: number; level: Level }

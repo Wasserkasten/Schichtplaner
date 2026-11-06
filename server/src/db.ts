@@ -45,6 +45,8 @@ function migrate(db: DB): void {
   // Eintritts-/Austrittsdatum (ISO); außerhalb sind keine Einträge möglich
   if (!has('employees', 'entry_date')) db.exec('ALTER TABLE employees ADD COLUMN entry_date TEXT');
   if (!has('employees', 'exit_date')) db.exec('ALTER TABLE employees ADD COLUMN exit_date TEXT');
+  // Darstellung je Benutzer: auto (wie System) | light | dark
+  if (!has('users', 'theme')) db.exec("ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'auto'");
   if (!has('users', 'seen_version')) db.exec('ALTER TABLE users ADD COLUMN seen_version TEXT');
   if (!has('users', 'ack_version')) db.exec('ALTER TABLE users ADD COLUMN ack_version TEXT');
   // Neue Konten sollen keine alten Neuigkeiten sehen: beim Anlegen auf die laufende Version setzen

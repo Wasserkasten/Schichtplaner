@@ -12,6 +12,10 @@
   --free: #e6f2e3;
   --today: #fff8c4;
   --danger: #c0392b;
+  --on-accent: #ffffff;   /* Schrift auf Akzentfarbe */
+  --topbar: #1f4e79;      /* Kopfzeile */
+  --topbar-admin: #6b3d1f; /* Kopfzeile im Verwaltungsbereich */
+  color-scheme: light;
   --cell-w: 2.45rem;   /* Mindestbreite einer Tageszelle */
   --name-w: 12rem;     /* Namensspalte im Kalender */
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -20,8 +24,9 @@
   color: var(--text);
   background: var(--bg);
 }
+/* Dunkel: wenn der Benutzer „Dunkel“ gewählt hat, oder bei „Automatisch“ und dunklem System */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #14181d;
     --panel: #1d232a;
     --text: #e3e8ee;
@@ -34,7 +39,29 @@
     --hol: #3a2d1f;
     --free: #1f3122;
     --today: #3d3a1c;
+    --on-accent: #0b1a28;
+    --topbar: #14314d;
+    --topbar-admin: #4a2a15;
+    color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+  --bg: #14181d;
+  --panel: #1d232a;
+  --text: #e3e8ee;
+  --muted: #93a0ae;
+  --line: #2f3741;
+  --line-strong: #46515e;
+  --accent: #6aa6dc;
+  --accent-soft: #23364a;
+  --we: #2a313b;
+  --hol: #3a2d1f;
+  --free: #1f3122;
+  --today: #3d3a1c;
+  --on-accent: #0b1a28;
+  --topbar: #14314d;
+  --topbar-admin: #4a2a15;
+  color-scheme: dark;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); }
@@ -45,7 +72,7 @@ button {
 }
 button:hover:not(:disabled) { border-color: var(--accent); }
 button:disabled { opacity: 0.5; cursor: default; }
-button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 button.danger { color: var(--danger); border-color: var(--danger); }
 button.link { border: 0; background: none; padding: 0; color: inherit; text-align: left; }
 button.link:hover:not(:disabled) { text-decoration: underline; color: var(--accent); }
@@ -60,7 +87,7 @@ h3 { font-size: 0.95rem; margin: 12px 0 6px; }
 .center { text-align: center; padding: 40px; }
 .spacer { flex: 1; }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 4px 0; }
-.badge { background: var(--accent); color: #fff; border-radius: 10px; padding: 2px 8px; font-size: 0.8em; margin-right: 4px; white-space: nowrap; }
+.badge { background: var(--accent); color: var(--on-accent); border-radius: 10px; padding: 2px 8px; font-size: 0.8em; margin-right: 4px; white-space: nowrap; }
 .badge.light { background: var(--accent-soft); color: var(--text); }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 12px; }
 .narrow { max-width: 420px; }
@@ -74,7 +101,7 @@ h3 { font-size: 0.95rem; margin: 12px 0 6px; }
 .app { display: flex; flex-direction: column; min-height: 100vh; }
 .topbar {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  padding: 6px 12px; background: var(--accent); color: #fff; position: sticky; top: 0; z-index: 30;
+  padding: 6px 12px; background: var(--topbar); color: #fff; position: sticky; top: 0; z-index: 30;
   padding-top: max(6px, env(safe-area-inset-top));
 }
 .brand { font-weight: 700; margin-right: 8px; }
@@ -140,7 +167,7 @@ table.plan.fixed { table-layout: fixed; width: 100%; }
 .plan td.sel { box-shadow: inset 0 0 0 2px var(--accent); background: var(--accent-soft); }
 .plan tr.team-row th, .plan tr.team-row td { background: var(--accent-soft); font-weight: 600; font-size: 0.79rem; color: var(--muted); }
 .plan tr.team-row th { color: var(--text); }
-.plan tr.dept-row th, .plan tr.dept-row td { background: var(--accent); color: #fff; font-weight: 700; font-size: 0.86rem; padding: 3px 8px; }
+.plan tr.dept-row th, .plan tr.dept-row td { background: var(--topbar); color: #fff; font-weight: 700; font-size: 0.86rem; padding: 3px 8px; }
 .plan tr.self th.name { font-weight: 700; }
 .plan td.void { background: repeating-linear-gradient(45deg, transparent 0 4px, var(--line) 4px 5px); }
 .daylink { border: 0; background: none; padding: 2px 0; display: flex; flex-direction: column; align-items: center; width: 100%; }
@@ -181,7 +208,7 @@ table.plan.fixed { table-layout: fixed; width: 100%; }
 .modal-head h2 { margin: 0; }
 .modal-body { padding: 12px 16px 16px; }
 .subtabs { display: flex; gap: 4px; margin-bottom: 10px; flex-wrap: wrap; }
-.subtabs button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.subtabs button.active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 .form { display: flex; flex-direction: column; gap: 10px; }
 .form label, .grid2 label { display: flex; flex-direction: column; gap: 3px; font-size: 0.9em; color: var(--muted); }
 .form label input, .form label select, .grid2 label input, .grid2 label select { color: var(--text); font-size: 1rem; }
@@ -323,7 +350,7 @@ details > summary.plain::after { content: ''; }
 .picker-pop { position: absolute; top: calc(100% + 4px); left: 0; z-index: 45; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18); min-width: 240px; }
 .picker-year { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .picker-months { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
-.picker-months button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.picker-months button.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .picker-months button.now { font-weight: 700; }
 
 /* Zellinhalt füllt die Zelle (für die Hover-Anzeige der Kommentare) */
@@ -331,3 +358,27 @@ details > summary.plain::after { content: ''; }
 .note-tip { position: fixed; z-index: 300; transform: translate(-50%, -100%); max-width: 280px; background: #26323f; color: #fff; padding: 6px 10px; border-radius: 6px; font-size: 0.85rem; line-height: 1.35; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); pointer-events: none; }
 .note-tip.below { transform: translate(-50%, 0); }
 .note-tip div + div { margin-top: 2px; }
+
+/* Verwaltungsbereich: andere Kopfzeilenfarbe, damit klar ist, wo man ist */
+.app.admin-mode .topbar { background: var(--topbar-admin); }
+.admin-label { font-weight: 700; letter-spacing: 0.02em; }
+.back-to-plan { background: rgba(255, 255, 255, 0.15); color: #fff; border-color: rgba(255, 255, 255, 0.4); }
+
+/* Benutzermenü */
+.usermenu .menu { min-width: 250px; }
+.usermenu .menu > button { text-align: left; border: 0; background: none; padding: 6px 8px; border-radius: 6px; }
+.usermenu .menu > button:hover { background: var(--accent-soft); }
+.menu-head { padding: 4px 8px 8px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.menu-sep { border-top: 1px solid var(--line); margin: 4px 0; }
+
+/* Profil */
+.profile section { border-top: 1px solid var(--line); padding: 10px 0; }
+.profile section:first-of-type { border-top: 0; padding-top: 0; }
+.profile h3 { margin: 0 0 6px; }
+.profile dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; }
+.profile dt { color: var(--muted); }
+.profile dd { margin: 0; }
+.seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; padding: 6px 12px; }
+.seg button + button { border-left: 1px solid var(--line-strong); }
+.seg button.active { background: var(--accent); color: var(--on-accent); }
