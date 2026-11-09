@@ -158,3 +158,16 @@ CREATE TABLE IF NOT EXISTS password_tokens (
   used_at     TEXT,
   attempts    INTEGER NOT NULL DEFAULT 0
 );
+
+-- Schulferien (Zeiträume), je Bundesland übernommen aus openholidaysapi.org oder von Hand gepflegt
+CREATE TABLE IF NOT EXISTS school_holidays (
+  id          INTEGER PRIMARY KEY,
+  start_date  TEXT NOT NULL,
+  end_date    TEXT NOT NULL,
+  name        TEXT NOT NULL,
+  state       TEXT,                        -- Bundesland-Kürzel (NW, BY, …) oder NULL bei eigenen Einträgen
+  from_source INTEGER NOT NULL DEFAULT 0,
+  CHECK (end_date >= start_date),
+  UNIQUE (start_date, name)
+);
+CREATE INDEX IF NOT EXISTS idx_school_holidays ON school_holidays(start_date, end_date);

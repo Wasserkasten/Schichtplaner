@@ -9,6 +9,10 @@ export interface Me {
   mustChangePassword: boolean;
   /** persönliche Schriftgröße, 1 = 100 % */
   fontScale: number;
+  /** Darstellung: auto (wie System) | light | dark */
+  theme: 'auto' | 'light' | 'dark';
+  /** bei Anmeldung über Änderungen anderer am eigenen Plan informieren */
+  notifyChanges: boolean;
 }
 export interface Department { id: number; name: string; sortOrder: number }
 export interface Team { id: number; departmentId: number; name: string; sortOrder: number; level: Level }
@@ -54,6 +58,9 @@ export interface Entry {
   masked?: boolean;
 }
 /** public = gesetzlicher Feiertag, company = betrieblich arbeitsfreier Tag (z. B. Heiligabend) */
+/** Schulferien-Zeitraum */
+export interface SchoolHoliday { id: number; start: string; end: string; name: string; state: string | null; fromSource: boolean }
+
 export interface Holiday { id: number; date: string; name: string; kind: 'public' | 'company'; fromSource: boolean }
 export interface Bootstrap {
   me: Me;

@@ -5,10 +5,14 @@ import { buildApp } from '../src/app.js';
 import { hashPassword } from '../src/auth.js';
 import { ensureEntryTypes } from '../src/seed-lib.js';
 import { holidays, easterSunday } from '../src/holidays.js';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 let db: DB;
 let app: FastifyInstance;
 let ids: Record<string, number>;
+let backupDir: string;
 
 async function login(username: string): Promise<string> {
   const res = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username, password: 'geheim123' } });
@@ -34,7 +38,8 @@ beforeEach(async () => {
   const typeK = (db.prepare("SELECT id FROM entry_types WHERE code = 'K'").get() as { id: number }).id;
   const typeF = (db.prepare("SELECT id FROM entry_types WHERE code = 'F'").get() as { id: number }).id;
   ids = { tA, tB, eA, eB, admin, anna, lead, typeK, typeF };
-  ({ app } = await buildApp({ db }));
+  backupDir = mkdtempSync(join(tmpdir(), 'sp-bk-'));
+  ({ app } = await buildApp({ db, backupDir }));
 });
 
 describe('Berechtigungen', () => {
@@ -130,6 +135,93 @@ describe('Backup', () => {
     expect(files).toHaveLength(3); // 2 Sicherungen + fremde Datei bleibt
     expect(files).toContain('fremd.txt');
     expect(files).not.toContain('schichtplaner-20260102-000000.db');
+  });
+});
+
+describe('Backups über die Oberfläche', () => {
+  it('Zeitplan: letzter fälliger Termin', async () => {
+    const { lastSlot, nextSlot, defaultSchedule } = await import('../src/backup.js');
+    const base = { ...defaultSchedule(), time: '02:30' };
+    const now = new Date(2026, 10, 6, 10, 0); // Fr 06.11.2026 10:00 (lokal)
+    expect(lastSlot({ ...base, mode: 'daily' }, now)).toEqual(new Date(2026, 10, 6, 2, 30));
+    expect(lastSlot({ ...base, mode: 'daily' }, new Date(2026, 10, 6, 1, 0))).toEqual(new Date(2026, 10, 5, 2, 30));
+    expect(lastSlot({ ...base, mode: 'hourly' }, now)).toEqual(new Date(2026, 10, 6, 9, 30));
+    expect(lastSlot({ ...base, mode: 'weekly', weekday: 1 }, now)).toEqual(new Date(2026, 10, 2, 2, 30)); // Montag
+    expect(lastSlot({ ...base, mode: 'weekly', weekday: 5 }, new Date(2026, 10, 6, 1, 0))).toEqual(new Date(2026, 9, 30, 2, 30));
+    expect(nextSlot({ ...base, mode: 'daily' }, now)).toEqual(new Date(2026, 10, 7, 2, 30));
+    expect(lastSlot({ ...base, mode: 'off' }, now)).toBeNull();
+  });
+
+  it('nur für Administratoren', async () => {
+    const cookie = await login('anna');
+    expect((await app.inject({ method: 'GET', url: '/api/admin/backups', headers: { cookie } })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'POST', url: '/api/admin/backups', headers: { cookie } })).statusCode).toBe(403);
+  });
+
+  it('Jetzt sichern, Liste, Herunterladen, Löschen', async () => {
+    const cookie = await login('admin');
+    const made = await app.inject({ method: 'POST', url: '/api/admin/backups', headers: { cookie } });
+    expect(made.statusCode).toBe(200);
+    const name = made.json().name as string;
+    expect(name).toMatch(/^manuell-\d{8}-\d{6}\.db$/);
+    const list = (await app.inject({ method: 'GET', url: '/api/admin/backups', headers: { cookie } })).json();
+    expect(list.files).toHaveLength(1);
+    expect(list.files[0]).toMatchObject({ name, kind: 'manual' });
+    expect(list.last.ok).toBe(true);
+    const dl = await app.inject({ method: 'GET', url: `/api/admin/backups/${name}/download`, headers: { cookie } });
+    expect(dl.statusCode).toBe(200);
+    expect(dl.rawPayload.subarray(0, 15).toString()).toBe('SQLite format 3');
+    // kein Ausbrechen aus dem Ordner
+    expect((await app.inject({ method: 'GET', url: '/api/admin/backups/..%2F..%2Fetc%2Fpasswd/download', headers: { cookie } })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'DELETE', url: `/api/admin/backups/${name}`, headers: { cookie } })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: '/api/admin/backups', headers: { cookie } })).json().files).toHaveLength(0);
+  });
+
+  it('Zeitplan speichern und prüfen', async () => {
+    const cookie = await login('admin');
+    const ok = await app.inject({ method: 'PUT', url: '/api/admin/backups/schedule', headers: { cookie }, payload: { mode: 'weekly', time: '23:15', weekday: 0, keep: 8, extraDir: '' } });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().next).toBeTruthy();
+    const bad = await app.inject({ method: 'PUT', url: '/api/admin/backups/schedule', headers: { cookie }, payload: { mode: 'daily', time: '25:00', weekday: 0, keep: 8, extraDir: '' } });
+    expect(bad.statusCode).toBe(400);
+    const rel = await app.inject({ method: 'PUT', url: '/api/admin/backups/schedule', headers: { cookie }, payload: { mode: 'daily', time: '02:00', weekday: 0, keep: 8, extraDir: 'nas' } });
+    expect(rel.statusCode).toBe(400);
+    expect((await app.inject({ method: 'GET', url: '/api/admin/backups', headers: { cookie } })).json().schedule).toMatchObject({ mode: 'weekly', keep: 8 });
+  });
+
+  it('Einspielen im laufenden Betrieb: Stand zurück, Anmeldung bleibt, Sicherheitskopie', async () => {
+    const cookie = await login('admin');
+    await app.inject({ method: 'POST', url: '/api/entries', headers: { cookie }, payload: { employeeId: ids.eA, date: '2026-11-02', typeId: ids.typeF } });
+    const name = (await app.inject({ method: 'POST', url: '/api/admin/backups', headers: { cookie } })).json().name as string;
+    // danach: weiterer Eintrag + Mitarbeiter umbenannt
+    await app.inject({ method: 'POST', url: '/api/entries', headers: { cookie }, payload: { employeeId: ids.eA, date: '2026-11-03', typeId: ids.typeK } });
+    db.prepare("UPDATE employees SET last_name = 'Neu' WHERE id = ?").run(ids.eA);
+    const res = await app.inject({ method: 'POST', url: `/api/admin/backups/${name}/restore`, headers: { cookie } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().safety).toMatch(/^vor-wiederherstellung-/);
+    const dates = (db.prepare('SELECT date FROM entries WHERE employee_id = ? ORDER BY date').all(ids.eA) as { date: string }[]).map((r) => r.date);
+    expect(dates).toEqual(['2026-11-02']);
+    expect((db.prepare('SELECT last_name FROM employees WHERE id = ?').get(ids.eA) as { last_name: string }).last_name).toBe('A');
+    // weiterhin angemeldet, Protokoll enthält das Einspielen
+    expect((await app.inject({ method: 'GET', url: '/api/bootstrap', headers: { cookie } })).statusCode).toBe(200);
+    expect(db.prepare("SELECT 1 FROM audit_log WHERE entity = 'backup' AND after_json LIKE ?").get(`%${name}%`)).toBeTruthy();
+    // Sicherheitskopie steht in der Liste
+    const kinds = (await app.inject({ method: 'GET', url: '/api/admin/backups', headers: { cookie } })).json().files.map((f: { kind: string }) => f.kind);
+    expect(kinds.sort()).toEqual(['manual', 'safety']);
+    expect((db.prepare('PRAGMA foreign_keys').get() as { foreign_keys: number }).foreign_keys).toBe(1);
+  });
+
+  it('Hochladen prüft die Datei', async () => {
+    const cookie = await login('admin');
+    const junk = await app.inject({ method: 'POST', url: '/api/admin/backups/upload', headers: { cookie, 'content-type': 'application/octet-stream' }, payload: Buffer.from('kein sqlite') });
+    expect(junk.statusCode).toBe(400);
+    const name = (await app.inject({ method: 'POST', url: '/api/admin/backups', headers: { cookie } })).json().name as string;
+    const data = (await app.inject({ method: 'GET', url: `/api/admin/backups/${name}/download`, headers: { cookie } })).rawPayload;
+    const up = await app.inject({ method: 'POST', url: '/api/admin/backups/upload', headers: { cookie, 'content-type': 'application/octet-stream' }, payload: data });
+    expect(up.statusCode).toBe(200);
+    expect(up.json().name).toMatch(/^hochgeladen-/);
+    const files = (await app.inject({ method: 'GET', url: '/api/admin/backups', headers: { cookie } })).json().files;
+    expect(files.map((f: { kind: string }) => f.kind).sort()).toEqual(['manual', 'upload']);
   });
 });
 
@@ -606,5 +698,76 @@ describe('Eintritt, Austritt, Planungsbeginn', () => {
     await app.inject({ method: 'POST', url: '/api/entries', headers: { cookie: admin }, payload: { employeeId: ids.eA, date: '2026-10-05', typeId: ids.typeF } });
     const boot = (await app.inject({ method: 'GET', url: '/api/bootstrap', headers: { cookie: admin } })).json();
     expect(boot.settings).toMatchObject({ planStart: '2026-10-01', dataStart: '2026-10-05' });
+  });
+});
+
+describe('Leeren mit Auswahl', () => {
+  it('entfernt nur die gewählten Eintragsarten bzw. Notizen', async () => {
+    const admin = await login('admin');
+    const typeId = (code: string) => (db.prepare('SELECT id FROM entry_types WHERE code = ?').get(code) as { id: number }).id;
+    const cell = { employeeId: ids.eA, date: '2026-12-15' };
+    for (const c of ['F', 'B']) await app.inject({ method: 'POST', url: '/api/entries', headers: { cookie: admin }, payload: { ...cell, typeId: typeId(c) } });
+    await app.inject({ method: 'POST', url: '/api/entries', headers: { cookie: admin }, payload: { ...cell, text: 'Notiz' } });
+    const clear = (only: object) => app.inject({ method: 'POST', url: '/api/entries/bulk', headers: { cookie: admin }, payload: { action: 'clear', cells: [cell], only } });
+    expect((await clear({ typeIds: [typeId('B')] })).json().deleted).toHaveLength(1);
+    const left = () => (db.prepare("SELECT COALESCE(t.code, 'Notiz') c FROM entries e LEFT JOIN entry_types t ON t.id = e.type_id WHERE e.employee_id = ? AND e.date = '2026-12-15' ORDER BY c").all(ids.eA) as { c: string }[]).map((r) => r.c);
+    expect(left()).toEqual(['F', 'Notiz']);
+    await clear({ typeIds: [], notes: true });
+    expect(left()).toEqual(['F']);
+  });
+});
+
+describe('Änderungen an meinem Plan', () => {
+  it('meldet Änderungen anderer seit dem letzten Besuch und listet das eigene Protokoll', async () => {
+    const anna = await login('anna');
+    const lead = await login('lead');
+    const summary = async () => (await app.inject({ method: 'GET', url: '/api/me/changes/summary', headers: { cookie: anna } })).json();
+    expect(await summary()).toEqual({ count: 0, users: [] }); // erster Aufruf setzt nur den Startpunkt
+    // eigene Änderung zählt nicht, die der Teamleitung (Pinsel über 2 Tage = 1 Änderung) schon
+    await app.inject({ method: 'POST', url: '/api/entries', headers: { cookie: anna }, payload: { employeeId: ids.eA, date: '2026-12-01', typeId: ids.typeF } });
+    await app.inject({ method: 'POST', url: '/api/entries/bulk', headers: { cookie: lead }, payload: { action: 'set', typeId: ids.typeK, cells: ['2026-12-02', '2026-12-03'].map((date) => ({ employeeId: ids.eA, date })) } });
+    expect(await summary()).toEqual({ count: 1, users: ['Lead'] });
+    const list = (await app.inject({ method: 'GET', url: '/api/me/changes', headers: { cookie: anna } })).json();
+    expect(list.rows.map((r: { user_name: string }) => r.user_name)).toEqual(['Lead', 'Lead', 'Anna']);
+    expect(list.rows[0].id).toBeGreaterThan(list.seenId); // als neu erkennbar
+    await app.inject({ method: 'POST', url: '/api/me/changes/seen', headers: { cookie: anna } });
+    expect((await summary()).count).toBe(0);
+    // Benutzer ohne verknüpften Mitarbeiter
+    expect((await app.inject({ method: 'GET', url: '/api/me/changes', headers: { cookie: lead } })).json().hasEmployee).toBe(false);
+  });
+});
+
+describe('Schulferien', () => {
+  const sample = [
+    { startDate: '2025-12-22', endDate: '2026-01-06', name: [{ language: 'DE', text: 'Weihnachtsferien' }] },
+    { startDate: '2026-10-17', endDate: '2026-10-31', name: [{ language: 'DE', text: 'Herbstferien' }] },
+  ];
+  it('aus der Quelle laden, übernehmen, bearbeiten; für alle lesbar', async () => {
+    const { vi } = await import('vitest');
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', async (url: string) => { calls.push(url); return new Response(JSON.stringify(sample), { status: 200 }); });
+    try {
+      const admin = await login('admin');
+      const src = (await app.inject({ method: 'GET', url: '/api/admin/school-holidays/source?year=2026&state=BY', headers: { cookie: admin } })).json();
+      expect(calls[0]).toContain('subdivisionCode=DE-BY');
+      expect(src.items.map((i: { name: string; status: string }) => `${i.name}:${i.status}`)).toEqual(['Weihnachtsferien:missing', 'Herbstferien:missing']);
+      await app.inject({ method: 'POST', url: '/api/admin/school-holidays/import', headers: { cookie: admin }, payload: { state: 'BY', items: src.items.map((i: object) => i) } });
+      const again = (await app.inject({ method: 'GET', url: '/api/admin/school-holidays/source?year=2026&state=BY', headers: { cookie: admin } })).json();
+      expect(again.items.every((i: { status: string }) => i.status === 'present')).toBe(true);
+      // eigener Zeitraum und für alle lesbar (inkl. Jahreswechsel)
+      await app.inject({ method: 'POST', url: '/api/admin/school-holidays', headers: { cookie: admin }, payload: { start: '2026-05-15', end: '2026-05-15', name: 'Beweglicher Ferientag' } });
+      const anna = await login('anna');
+      const y25 = (await app.inject({ method: 'GET', url: '/api/school-holidays?year=2025', headers: { cookie: anna } })).json();
+      expect(y25.periods.map((p: { name: string }) => p.name)).toEqual(['Weihnachtsferien']);
+      expect((await app.inject({ method: 'GET', url: '/api/school-holidays?year=2026', headers: { cookie: anna } })).json().periods).toHaveLength(3);
+      expect((await app.inject({ method: 'POST', url: '/api/admin/school-holidays', headers: { cookie: anna }, payload: { start: '2026-01-01', end: '2026-01-02', name: 'x' } })).statusCode).toBe(403);
+      // Quelle nicht erreichbar -> verständliche Meldung
+      vi.stubGlobal('fetch', async () => { throw new Error('getaddrinfo ENOTFOUND'); });
+      const down = await app.inject({ method: 'GET', url: '/api/admin/school-holidays/source?year=2026', headers: { cookie: admin } });
+      expect(down.statusCode).toBe(502);
+      expect(down.json().error).toContain('nicht erreichbar');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

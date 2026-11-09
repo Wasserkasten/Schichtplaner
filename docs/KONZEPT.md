@@ -115,6 +115,9 @@ Das ist ein privates Projekt mit Daten des Arbeitgebers – das sollte vor einem
 - 0.2: Cloudflare Tunnel, Port einstellbar
 - 0.3: Rückgängig mit Meldungen, lesbares Protokoll, Jahresübersicht drucken/PDF, Versionsnummer und Changelog,
   bis zu 3 Dienste pro Tag, volle Kalenderbreite, Schriftgröße, Feiertage verwalten, Beispieldaten
+- 0.4: Ein- und Austrittsdatum, Planungsbeginn, Notiz-Ecke bei jedem Text
+- 0.5: Profilmenü mit Hell-/Dunkelmodus, Verwaltung im Benutzermenü, „Änderungen an meinem Plan“, Schulferien,
+  Backup-Seite (Zeitplan, Einspielen im laufenden Betrieb), Pinsel-Rückfrage, gezieltes Löschen, Monats-/Jahresauswahl
 
 **Als Nächstes**
 1. Import der bisherigen Daten aus schichtplaner.de (CSV/Excel-Export) und Export des Monatsplans (Excel/PDF)
@@ -124,4 +127,4 @@ Das ist ein privates Projekt mit Daten des Arbeitgebers – das sollte vor einem
 5. Urlaubsanträge mit Genehmigung durch Teamleitung
 6. Kalender-Abo (iCal) für den eigenen Dienstplan, Benachrichtigungen (E-Mail/Push) bei Planänderungen
 7. Dienst-Rhythmen/Vorlagen (z. B. F-F-S-S-N-N-frei-frei) automatisch eintragen
-8. SSO / 2-Faktor-Anmeldung, Backups automatisieren
+8. SSO / 2-Faktor-Anmeldung

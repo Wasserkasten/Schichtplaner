@@ -90,8 +90,12 @@ export async function authRoutes(app: FastifyInstance, { db, secureCookies }: Ap
   /** Persönliche Darstellung (gilt auf allen Geräten des Benutzers). */
   app.put('/api/me/preferences', async (req) => {
     const { user } = requireUser(req);
-    const b = z.object({ fontScale: z.number().min(0.8).max(2) }).parse(req.body);
-    db.prepare('UPDATE users SET font_scale = ? WHERE id = ?').run(Math.round(b.fontScale * 100) / 100, user.id);
+    const b = z
+      .object({ fontScale: z.number().min(0.8).max(2).optional(), theme: z.enum(['auto', 'light', 'dark']).optional(), notifyChanges: z.boolean().optional() })
+      .parse(req.body);
+    if (b.notifyChanges !== undefined) db.prepare('UPDATE users SET notify_changes = ? WHERE id = ?').run(b.notifyChanges ? 1 : 0, user.id);
+    if (b.fontScale !== undefined) db.prepare('UPDATE users SET font_scale = ? WHERE id = ?').run(Math.round(b.fontScale * 100) / 100, user.id);
+    if (b.theme !== undefined) db.prepare('UPDATE users SET theme = ? WHERE id = ?').run(b.theme, user.id);
     return { ok: true };
   });
 

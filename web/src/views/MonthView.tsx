@@ -7,11 +7,18 @@ import { blockedReason, canEditEmployee, departmentName, groupedEmployees, minPl
 import type { Entry, EntryType, Holiday } from '../types';
 import { EntryChip } from '../components/EntryChip';
 import { CellEditor } from '../components/CellEditor';
+import { Modal } from '../components/Modal';
+import { MonthPickerTitle } from '../components/MonthPicker';
 
 /** Pinsel: null = Auswahlmodus (Dialog), 'clear' = Radierer, Zahl = Eintragsart */
 type Brush = null | 'clear' | number;
 
 interface Sel { emp0: number; emp1: number; d0: number; d1: number; add: boolean }
+type Cell = { employeeId: number; date: string };
+/** Rückfrage, wenn der Pinsel auf schon belegte Felder trifft */
+interface OverwriteAsk { cells: Cell[]; typeId: number; conflicts: number; codes: string[] }
+/** Rückfrage beim Leeren, wenn verschiedene Einträge betroffen sind */
+interface ClearAsk { cells: Cell[]; options: { key: string; label: string; count: number; typeId: number | null }[] }
 
 /** Zeitraum-Auswahl: 0 = Kalendermonat, -1 = so viele Tage, wie in die Fensterbreite passen, sonst feste Anzahl Tage. */
 export const FIT_WIDTH = -1;
@@ -79,7 +86,12 @@ export function MonthView({ nav, setNav }: { nav: NavState; setNav: (n: NavState
   }, [from, to]);
 
   const [brush, setBrush] = useState<Brush>(null);
-  const [addMode, setAddMode] = useState(false);
+  const [overwriteAsk, setOverwriteAsk] = useState<OverwriteAsk | null>(null);
+  const [clearAsk, setClearAsk] = useState<ClearAsk | null>(null);
+  const [clearPick, setClearPick] = useState<Set<string>>(new Set());
+  // „für diesen Pinsel nicht mehr fragen“: gemerkte Antwort, bis ein anderer Pinsel gewählt wird
+  const [remembered, setRemembered] = useState<{ brush: number; mode: 'set' | 'add' } | null>(null);
+  const [rememberBox, setRememberBox] = useState(false);
   const [editing, setEditing] = useState<{ employeeId: number; date: string } | null>(null);
   const [sel, setSel] = useState<Sel | null>(null);
   const dragging = useRef(false);
@@ -100,8 +112,60 @@ export function MonthView({ nav, setNav }: { nav: NavState; setNav: (n: NavState
     return ei >= Math.min(sel.emp0, sel.emp1) && ei <= Math.max(sel.emp0, sel.emp1) && di >= Math.min(sel.d0, sel.d1) && di <= Math.max(sel.d0, sel.d1);
   }
 
+  async function runBulk(body: { action: 'set' | 'add' | 'clear'; cells: Cell[]; typeId?: number; only?: { typeIds: number[]; notes: boolean } }) {
+    try {
+      const res = await post<{ created: Entry[]; deleted: number[]; skipped: number; outside?: number; changeId: string }>('/api/entries/bulk', body);
+      store.applyChange(res.changeId, { created: res.created, deletedIds: res.deleted });
+      if (res.outside) store.toast(`${res.outside} ${res.outside === 1 ? 'Tag' : 'Tage'} übersprungen: außerhalb der Beschäftigung bzw. vor dem Planungsbeginn.`);
+      if (res.skipped) store.toast(`${res.skipped} ${res.skipped === 1 ? 'Tag' : 'Tage'} übersprungen: dort schon eingetragen oder bereits 3 Dienste.`);
+    } catch (e) {
+      reportError(e);
+    }
+  }
+
+  /** Leeren: bei unterschiedlichen Einträgen erst fragen, was weg soll (selten soll alles weg). */
+  function startClear(cells: Cell[]) {
+    const counts = new Map<string, { label: string; count: number; typeId: number | null }>();
+    let multi = false;
+    for (const c of cells) {
+      const list = st.cell(c.employeeId, c.date).filter((e) => !e.masked);
+      if (list.length > 1) multi = true;
+      for (const e of list) {
+        const t = e.typeId ? types.get(e.typeId) : undefined;
+        const key = t ? `t${t.id}` : 'notes';
+        const cur = counts.get(key) ?? { label: t ? `${t.code} – ${t.name}` : 'Notizen (Freitext ohne Dienst)', count: 0, typeId: t?.id ?? null };
+        cur.count++;
+        counts.set(key, cur);
+      }
+    }
+    if (counts.size === 0) return;
+    if (counts.size === 1 && !multi) return void runBulk({ action: 'clear', cells }); // eindeutig: direkt (Rückgängig möglich)
+    setClearPick(new Set());
+    setClearAsk({ cells, options: [...counts.entries()].map(([key, v]) => ({ key, ...v })) });
+  }
+
+  /** Pinsel: trifft er auf Felder mit anderen Diensten, fragen: überschreiben oder zusätzlich? */
+  function startSet(cells: Cell[], typeId: number) {
+    const conflictCells = cells.filter((c) => {
+      const typed = st.cell(c.employeeId, c.date).filter((e) => e.typeId || e.masked);
+      return typed.length > 0 && !typed.some((e) => e.typeId === typeId);
+    });
+    if (conflictCells.length === 0) return void runBulk({ action: 'set', cells, typeId });
+    if (remembered && remembered.brush === typeId) return void runBulk({ action: remembered.mode, cells, typeId });
+    const codes = [...new Set(conflictCells.flatMap((c) => st.cell(c.employeeId, c.date).filter((e) => e.typeId || e.masked).map((e) => (e.typeId ? types.get(e.typeId)?.code ?? '?' : 'abw'))))];
+    setRememberBox(false);
+    setOverwriteAsk({ cells, typeId, conflicts: conflictCells.length, codes });
+  }
+
+  function answerOverwrite(mode: 'set' | 'add') {
+    if (!overwriteAsk) return;
+    if (rememberBox) setRemembered({ brush: overwriteAsk.typeId, mode });
+    void runBulk({ action: mode, cells: overwriteAsk.cells, typeId: overwriteAsk.typeId });
+    setOverwriteAsk(null);
+  }
+
   async function applyBrush(s: Sel) {
-    const cells: { employeeId: number; date: string }[] = [];
+    const cells: Cell[] = [];
     for (let ei = Math.min(s.emp0, s.emp1); ei <= Math.max(s.emp0, s.emp1); ei++) {
       const emp = flat[ei];
       if (!canEditEmployee(boot, emp.id)) continue;
@@ -110,19 +174,10 @@ export function MonthView({ nav, setNav }: { nav: NavState; setNav: (n: NavState
         cells.push({ employeeId: emp.id, date: days[di] });
       }
     }
-    if (cells.length === 0) return;
-    try {
-      const res = await post<{ created: Entry[]; deleted: number[]; skipped: number; outside?: number; changeId: string }>('/api/entries/bulk', {
-        action: brush === 'clear' ? 'clear' : s.add ? 'add' : 'set',
-        typeId: brush === 'clear' ? undefined : brush,
-        cells,
-      });
-      store.applyChange(res.changeId, { created: res.created, deletedIds: res.deleted });
-      if (res.outside) store.toast(`${res.outside} ${res.outside === 1 ? 'Tag' : 'Tage'} übersprungen: außerhalb der Beschäftigung bzw. vor dem Planungsbeginn.`);
-      if (res.skipped) store.toast(`${res.skipped} ${res.skipped === 1 ? 'Tag' : 'Tage'} übersprungen: dort schon eingetragen oder bereits 3 Dienste.`);
-    } catch (e) {
-      reportError(e);
-    }
+    if (cells.length === 0 || brush === null) return;
+    if (brush === 'clear') return startClear(cells);
+    if (s.add) return void runBulk({ action: 'add', cells, typeId: brush }); // Strg/⌘: direkt zusätzlich
+    startSet(cells, brush);
   }
 
   useEffect(() => {
@@ -143,7 +198,7 @@ export function MonthView({ nav, setNav }: { nav: NavState; setNav: (n: NavState
     e.preventDefault();
     dragging.current = true;
     // Strg/⌘ gedrückt: diesen Strich zusätzlich eintragen statt zu ersetzen
-    setSel({ emp0: ei, emp1: ei, d0: di, d1: di, add: brush !== 'clear' && (addMode || e.ctrlKey || e.metaKey) });
+    setSel({ emp0: ei, emp1: ei, d0: di, d1: di, add: brush !== 'clear' && (e.ctrlKey || e.metaKey) });
   };
   const onEnter = (ei: number, di: number) => {
     if (dragging.current) setSel((s) => (s ? { ...s, emp1: ei, d1: di } : s));
@@ -161,7 +216,12 @@ export function MonthView({ nav, setNav }: { nav: NavState; setNav: (n: NavState
         <button onClick={() => step(-1)} aria-label="zurück" disabled={atStart} title={atStart ? `Früher geht es nicht: ${boot.settings.planStart ? 'Planungsbeginn' : 'vorher gibt es keine Daten'} (Einstellungen → Planungsbeginn)` : undefined}>◀</button>
         <button onClick={() => setNav({ ...nav, date: nav.days ? mondayOf(t) : t })}>Heute</button>
         <button onClick={() => step(1)} aria-label="vor">▶</button>
-        <h1>{title}</h1>
+        <MonthPickerTitle
+          label={title}
+          value={from}
+          min={minDate}
+          onPick={(first) => setNav({ ...nav, date: first < minFrom ? minFrom : first })}
+        />
         <select value={nav.days} onChange={(e) => changeRange(Number(e.target.value))} aria-label="Zeitraum">
           <option value={0}>Monat</option>
           <option value={7}>7 Tage</option>
@@ -184,7 +244,10 @@ export function MonthView({ nav, setNav }: { nav: NavState; setNav: (n: NavState
               className={brush === ty.id ? 'pal active' : 'pal'}
               style={{ background: ty.color, color: ty.textColor }}
               title={`${ty.name} – Zellen anklicken oder mit gedrückter Maus markieren`}
-              onClick={() => setBrush(brush === ty.id ? null : ty.id)}
+              onClick={() => {
+                setBrush(brush === ty.id ? null : ty.id);
+                setRemembered(null);
+              }}
             >
               {ty.code}
             </button>
@@ -192,12 +255,9 @@ export function MonthView({ nav, setNav }: { nav: NavState; setNav: (n: NavState
         <button className={brush === 'clear' ? 'pal active' : 'pal'} onClick={() => setBrush(brush === 'clear' ? null : 'clear')} title="Einträge entfernen">
           ⌫ Leeren
         </button>
-        <label className="pal-mode" title="Aus: der Pinsel ersetzt vorhandene Dienste. An: er trägt zusätzlich ein (bis zu 3 pro Tag). Alternativ beim Klicken Strg gedrückt halten.">
-          <input type="checkbox" checked={addMode} onChange={(e) => setAddMode(e.target.checked)} /> zusätzlich eintragen
-        </label>
         {brush !== null && (
           <span className="muted small">
-            Pinsel aktiv: Zellen anklicken oder ziehen{brush !== 'clear' && !addMode ? ' – Strg halten = zusätzlich' : ''}. Esc/„Auswahl“ beendet.
+            Pinsel aktiv: Zellen anklicken oder ziehen{brush !== 'clear' ? ' – Strg halten = direkt zusätzlich eintragen' : ''}. Esc/„Auswahl“ beendet.
           </span>
         )}
       </div>
@@ -221,8 +281,9 @@ export function MonthView({ nav, setNav }: { nav: NavState; setNav: (n: NavState
               <th className="sticky-col">Mitarbeiter</th>
               {days.map((d) => {
                 const h = st.holidayOn(d);
+                const sf = st.schoolHolidayOn(d);
                 return (
-                  <th key={d} className={dayClass(d, t, h)} title={holidayTitle(h)}>
+                  <th key={d} className={`${dayClass(d, t, h)}${sf ? ' sf' : ''}`} title={[holidayTitle(h), sf && `${sf.name} (Schulferien)`].filter(Boolean).join(' · ') || undefined}>
                     <button className="daylink" onClick={() => setNav({ ...nav, kind: 'day', date: d })}>
                       <span className="wd">{WEEKDAYS[weekday(d)]}</span>
                       <span className="dn">{d.slice(8)}</span>
@@ -287,37 +348,96 @@ export function MonthView({ nav, setNav }: { nav: NavState; setNav: (n: NavState
       <Legend />
       <EscToSelect onEsc={() => setBrush(null)} />
       {editing && <CellEditor {...editing} onClose={() => setEditing(null)} />}
+      {overwriteAsk && (
+        <Modal title="Feld schon belegt" onClose={() => setOverwriteAsk(null)}>
+          <p>
+            {overwriteAsk.conflicts === 1 ? 'Im markierten Feld ist' : `In ${overwriteAsk.conflicts} der markierten Felder ist`} bereits{' '}
+            <strong>{overwriteAsk.codes.join(', ')}</strong> eingetragen. Was soll mit <strong>{types.get(overwriteAsk.typeId)?.code}</strong> passieren?
+          </p>
+          <label className="inline small"><input type="checkbox" checked={rememberBox} onChange={(e) => setRememberBox(e.target.checked)} /> für diesen Pinsel nicht mehr fragen</label>
+          <div className="actions">
+            <button onClick={() => setOverwriteAsk(null)}>Abbrechen</button>
+            <button onClick={() => answerOverwrite('add')}>Zusätzlich eintragen</button>
+            <button className="primary" onClick={() => answerOverwrite('set')}>Überschreiben</button>
+          </div>
+          <p className="small muted">Tipp: Mit gedrückter Strg-Taste trägt der Pinsel ohne Rückfrage zusätzlich ein.</p>
+        </Modal>
+      )}
+      {clearAsk && (
+        <Modal title="Was soll entfernt werden?" onClose={() => setClearAsk(null)}>
+          <p className="small">Im markierten Bereich gibt es verschiedene Einträge. Bitte auswählen, was gelöscht werden soll:</p>
+          <div className="radio-list">
+            {clearAsk.options.map((o) => (
+              <label key={o.key}>
+                <input
+                  type="checkbox"
+                  checked={clearPick.has(o.key)}
+                  onChange={(e) => {
+                    const n = new Set(clearPick);
+                    if (e.target.checked) n.add(o.key);
+                    else n.delete(o.key);
+                    setClearPick(n);
+                  }}
+                />
+                {o.label} <span className="muted small">({o.count}×)</span>
+              </label>
+            ))}
+          </div>
+          <div className="actions">
+            <button onClick={() => setClearAsk(null)}>Abbrechen</button>
+            <button onClick={() => setClearPick(new Set(clearAsk.options.map((o) => o.key)))}>Alle auswählen</button>
+            <button
+              className="danger"
+              disabled={clearPick.size === 0}
+              onClick={() => {
+                const picked = clearAsk.options.filter((o) => clearPick.has(o.key));
+                void runBulk({
+                  action: 'clear',
+                  cells: clearAsk.cells,
+                  only: { typeIds: picked.filter((o) => o.typeId != null).map((o) => o.typeId!), notes: picked.some((o) => o.typeId == null) },
+                });
+                setClearAsk(null);
+              }}
+            >
+              Ausgewählte löschen
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
 
 /**
  * Inhalt einer Zelle: bis zu drei Dienste/An-/Abwesenheiten nebeneinander (bei wenig Platz untereinander, verkleinert).
- * Notizen erscheinen neben Diensten nur als Markierung in der Ecke (Text beim Darüberfahren), allein als Text.
+ * Text (Notiz ohne Dienst oder Kommentar an einem Dienst) erscheint nur als gelbe Ecke; beim Darüberfahren
+ * zeigt NoteTooltip den Inhalt der Zelle samt Kommentaren an.
  */
 export function CellContent({ entries, types }: { entries: Entry[]; types: Map<number, EntryType> }) {
   const typed = entries.filter((e) => e.typeId || e.masked);
-  const notes = entries.filter((e) => !e.typeId && !e.masked);
-  // Ecke bei jedem Text – auch wenn er an einem Dienst hängt (z. B. „F“ mit „Schulung ab 10 Uhr“)
-  const texts = entries.filter((e) => e.text && !e.masked).map((e) => (e.typeId ? `${types.get(e.typeId)?.code ?? ''}: ${e.text}` : e.text!));
-  if (typed.length === 0) {
-    return (
-      <>
-        {notes.map((e) => (
-          <EntryChip key={e.id} e={e} types={types} />
-        ))}
-      </>
-    );
-  }
+  const hasText = entries.some((e) => e.text && !e.masked);
+  const tip = hasText
+    ? entries
+        .filter((e) => !e.masked || e.typeId)
+        .map((e) => {
+          const t = e.typeId ? types.get(e.typeId) : undefined;
+          const time = e.startTime || t?.startTime ? ` (${e.startTime ?? t?.startTime}–${e.endTime ?? t?.endTime})` : '';
+          if (e.masked) return 'abwesend';
+          return t ? `${t.code} ${t.name}${time}${e.text ? `: ${e.text}` : ''}` : `Notiz: ${e.text}`;
+        })
+        .join('\n')
+    : undefined;
   return (
-    <>
-      <div className={typed.length > 1 ? 'chips multi' : 'chips'}>
-        {typed.map((e) => (
-          <EntryChip key={e.id} e={e} types={types} />
-        ))}
-      </div>
-      {texts.length > 0 && <span className="note-mark" title={texts.join('\n')} />}
-    </>
+    <div className="cell-inner" data-tip={tip}>
+      {typed.length > 0 && (
+        <div className={typed.length > 1 ? 'chips multi' : 'chips'}>
+          {typed.map((e) => (
+            <EntryChip key={e.id} e={e} types={types} noTitle={hasText} />
+          ))}
+        </div>
+      )}
+      {hasText && <span className="note-mark" />}
+    </div>
   );
 }
 
@@ -350,6 +470,7 @@ export function Legend() {
     <div className="legend">
       <span><span className="swatch hol" /> Feiertag</span>
       <span><span className="swatch hol free" /> arbeitsfreier Tag</span>
+      <span><span className="swatch sf-swatch" /> Schulferien</span>
       <span><span className="swatch note-swatch" /> Notiz / Text</span>
       <span><span className="swatch outside-swatch" /> nicht beschäftigt</span>
       {boot!.entryTypes

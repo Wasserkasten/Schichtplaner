@@ -15,6 +15,10 @@ import { viewRoutes } from './routes/views.js';
 import { holidayRoutes } from './routes/holidays.js';
 import { pdfRoutes } from './routes/pdf.js';
 import { infoRoutes } from './routes/info.js';
+import { meRoutes } from './routes/me.js';
+import { schoolHolidayRoutes } from './routes/school-holidays.js';
+import { backupRoutes } from './routes/backups.js';
+import { dirname, join } from 'node:path';
 import { APP_VERSION } from './version.js';
 
 declare module 'fastify' {
@@ -28,6 +32,8 @@ export interface AppContext {
   db: DB;
   hub: RealtimeHub;
   secureCookies: boolean;
+  /** Ordner für Sicherungen (Verwaltung → Backups) */
+  backupDir: string;
 }
 
 export class HttpError extends Error {
@@ -51,6 +57,13 @@ export function requireAdmin(req: FastifyRequest): { user: UserRow; perms: Permi
   return r;
 }
 
+/** Standard: Unterordner „backups“ neben der Datenbank (bzw. BACKUP_DIR). */
+export function defaultBackupDir(db: DB): string {
+  if (process.env.BACKUP_DIR) return process.env.BACKUP_DIR;
+  const file = db.name && db.name !== ':memory:' ? db.name : join(process.cwd(), 'data', 'x.db');
+  return join(dirname(file), 'backups');
+}
+
 export const SESSION_COOKIE = 'sp_session';
 
 export async function buildApp(opts: {
@@ -59,9 +72,10 @@ export async function buildApp(opts: {
   secureCookies?: boolean;
   trustProxy?: boolean;
   logger?: boolean;
+  backupDir?: string;
 }): Promise<{ app: FastifyInstance; ctx: AppContext }> {
   const app = Fastify({ logger: opts.logger ?? false, trustProxy: opts.trustProxy ?? true, forceCloseConnections: true });
-  const ctx: AppContext = { db: opts.db, hub: new RealtimeHub(opts.db), secureCookies: !!opts.secureCookies };
+  const ctx: AppContext = { db: opts.db, hub: new RealtimeHub(opts.db), secureCookies: !!opts.secureCookies, backupDir: opts.backupDir ?? defaultBackupDir(opts.db) };
 
   await app.register(cookie);
   app.decorateRequest('user', null);
@@ -104,6 +118,9 @@ export async function buildApp(opts: {
     await holidayRoutes(api, ctx);
     await pdfRoutes(api, ctx);
     await infoRoutes(api, ctx);
+    await meRoutes(api, ctx);
+    await schoolHolidayRoutes(api, ctx);
+    await backupRoutes(api, ctx);
   });
 
   if (opts.staticDir && existsSync(opts.staticDir)) {

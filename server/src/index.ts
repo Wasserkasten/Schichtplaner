@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { openDb } from './db.js';
 import { buildApp } from './app.js';
 import { ensureInitialAdmin } from './seed-lib.js';
-import { scheduleBackups } from './backup.js';
+import { startBackupScheduler } from './backup.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const env = process.env;
@@ -15,7 +15,7 @@ const staticDir = env.STATIC_DIR ?? join(here, '..', '..', 'web', 'dist');
 const db = openDb(dbFile);
 ensureInitialAdmin(db);
 
-const { app } = await buildApp({
+const { app, ctx } = await buildApp({
   db,
   staticDir,
   secureCookies: env.SECURE_COOKIES === 'true',
@@ -23,9 +23,8 @@ const { app } = await buildApp({
   logger: true,
 });
 
-if (env.BACKUP_DIR) {
-  scheduleBackups(db, env.BACKUP_DIR, Number(env.BACKUP_KEEP ?? 14), (m) => app.log.info(m));
-}
+// Zeitplan und Ordner: Verwaltung → Backups (Standard täglich 02:30, Ordner BACKUP_DIR bzw. data/backups)
+startBackupScheduler(db, ctx.backupDir, (m) => app.log.info(m));
 
 const shutdown = async () => {
   await app.close();

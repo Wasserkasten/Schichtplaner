@@ -35,3 +35,32 @@ export async function saveFontScale(scale: number): Promise<void> {
   applyFontScale(scale);
   await put('/api/me/preferences', { fontScale: scale });
 }
+
+// ---------- Darstellung hell / dunkel ----------
+export type Theme = 'auto' | 'light' | 'dark';
+const THEME_KEY = 'sp-theme';
+
+/** auto = wie das Betriebssystem; light/dark erzwingt die Darstellung (siehe styles.css, [data-theme]). */
+export function applyTheme(theme: Theme): void {
+  if (theme === 'auto') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = theme;
+  try {
+    localStorage.setItem(THEME_KEY, theme);
+  } catch {
+    /* egal */
+  }
+}
+
+export function restoreTheme(): void {
+  try {
+    const t = localStorage.getItem(THEME_KEY);
+    if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+  } catch {
+    /* ignorieren */
+  }
+}
+
+export async function saveTheme(theme: Theme): Promise<void> {
+  applyTheme(theme);
+  await put('/api/me/preferences', { theme });
+}

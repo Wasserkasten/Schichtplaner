@@ -24,6 +24,8 @@ services:
       - "${APP_BIND:-127.0.0.1:3000}:3000"
     volumes:
       - data:/data
+      # optional: zweiter Speicherort für Sicherungen (z. B. NAS), in der App unter Verwaltung → Backups als /backup-extra eintragen
+      # - /mnt/nas/schichtplaner:/backup-extra
     networks:
       default:
         # unter diesem Namen erreichen andere Container (Caddy, cloudflared, …) die App: http://schichtplaner:3000

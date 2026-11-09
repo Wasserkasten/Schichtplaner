@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { get, post } from './api';
 import { describeEntries, type ChangeParts } from './describe';
-import type { Bootstrap, Entry, Holiday } from './types';
+import type { Bootstrap, Entry, Holiday, SchoolHoliday } from './types';
 
 type Listener = () => void;
 
@@ -31,6 +31,10 @@ class Store {
   live = false;
   toasts: { id: number; text: string; kind: 'info' | 'error' }[] = [];
   notices: ChangeNotice[] = [];
+  /** Änderungen anderer am eigenen Plan, seit der Hinweis zuletzt gelesen wurde (Live-Zähler) */
+  foreignChanges = 0;
+  private foreignToastAt = 0;
+  private foreignChangeIds = new Set<string>();
 
   private version = 0;
   private cellIndex: Map<string, Entry[]> | null = null;
@@ -94,6 +98,25 @@ class Store {
     }
   }
 
+  private noteForeignChange(by: number, changeId?: string) {
+    // „gelöscht“ + „angelegt“ derselben Aktion nur einmal zählen
+    if (changeId && this.foreignChangeIds.has(changeId)) return;
+    if (changeId) this.foreignChangeIds.add(changeId);
+    this.foreignChanges++;
+    // nicht bei jedem Pinselstrich einzeln melden
+    if (Date.now() - this.foreignToastAt > 30_000) {
+      this.foreignToastAt = Date.now();
+      const name = this.boot?.users.find((u) => u.id === by)?.displayName ?? 'Jemand';
+      this.toast(`${name} hat gerade deinen Plan geändert – Details unter „Änderungen an meinem Plan“.`);
+    }
+    this.emit();
+  }
+
+  resetForeignChanges() {
+    this.foreignChanges = 0;
+    this.emit();
+  }
+
   dismissNotice(id: number) {
     this.patchNotice(id, { popupUntil: 0 });
   }
@@ -147,6 +170,30 @@ class Store {
     this.emit();
   }
 
+  /** Schulferien je Jahr (Zeiträume, die das Jahr berühren) */
+  schoolHolidays = new Map<number, SchoolHoliday[]>();
+  schoolHolidayState = '';
+
+  async loadSchoolHolidays(year: number) {
+    if (this.schoolHolidays.has(year)) return;
+    this.schoolHolidays.set(year, []);
+    try {
+      const r = await get<{ state: string; periods: SchoolHoliday[] }>(`/api/school-holidays?year=${year}`);
+      this.schoolHolidays.set(year, r.periods);
+      this.schoolHolidayState = r.state;
+      this.emit();
+    } catch {
+      this.schoolHolidays.delete(year);
+    }
+  }
+
+  /** Schulferien an diesem Tag (oder undefined). */
+  schoolHolidayOn(date: string): SchoolHoliday | undefined {
+    const y = Number(date.slice(0, 4));
+    if (!this.schoolHolidays.has(y)) void this.loadSchoolHolidays(y);
+    return this.schoolHolidays.get(y)?.find((p) => p.start <= date && p.end >= date);
+  }
+
   holidayOn(date: string): Holiday | undefined {
     const y = Number(date.slice(0, 4));
     if (!this.holidays.has(y)) void this.loadHolidays(y);
@@ -196,12 +243,19 @@ class Store {
       if (wasOffline) this.reloadRanges();
     });
     es.addEventListener('entries', (ev) => {
-      const msg = JSON.parse((ev as MessageEvent).data) as { action: 'upsert' | 'delete'; items: Entry[] };
+      const msg = JSON.parse((ev as MessageEvent).data) as { action: 'upsert' | 'delete'; by?: number; changeId?: string; items: Entry[] };
+      // jemand anderes ändert gerade meinen Plan -> kurz Bescheid geben (gelöschte Einträge kennen wir vor dem Entfernen)
+      const me = this.boot?.me;
+      if (me?.employeeId && msg.by && msg.by !== me.id) {
+        const mine = msg.action === 'upsert' ? msg.items.some((i) => i.employeeId === me.employeeId) : msg.items.some((i) => this.entries.get(i.id)?.employeeId === me.employeeId);
+        if (mine) this.noteForeignChange(msg.by, msg.changeId);
+      }
       if (msg.action === 'upsert') this.upsert(msg.items);
       else this.remove(msg.items.map((i) => i.id));
     });
     es.addEventListener('holidays', () => {
       this.holidays.clear(); // werden beim nächsten Zeichnen neu geladen
+      this.schoolHolidays.clear();
       this.emit();
     });
     es.addEventListener('masterdata', (ev) => {

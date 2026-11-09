@@ -7,7 +7,7 @@
 | Wofür | dauerhafter, öffentlich erreichbarer Betrieb | Ausprobieren, Entwicklung, oder wenn Docker nicht erlaubt ist |
 | HTTPS | automatisch (Caddy **oder** Cloudflare Tunnel ist dabei) | selbst einrichten (Caddy/nginx/cloudflared) |
 | Neustart nach Absturz/Reboot | automatisch | selbst einrichten (systemd) |
-| Backups | automatisch täglich | automatisch, wenn `BACKUP_DIR` gesetzt ist |
+| Backups | automatisch (Zeitplan in der App) | ebenso; Ordner `backups` neben der Datenbank oder `BACKUP_DIR` |
 | Updates | `git pull` + ein Befehl | `git pull` + Build + Neustart |
 | Abhängigkeiten auf dem Server | nur Docker | Node.js 22 |
 
@@ -186,7 +186,8 @@ Ohne `ADMIN_PASSWORD` erzeugt die App ein zufälliges Passwort und schreibt es i
 
 ## 3. Ersteinrichtung in der App
 
-Alles Folgende geschieht im Browser unter **Verwaltung** (nur für Administratoren sichtbar). Empfohlene Reihenfolge:
+Alles Folgende geschieht im Browser unter **Verwaltung**: oben rechts auf den eigenen Namen klicken → **⚙ Verwaltung**
+(nur für Administratoren und Team-Verwalter sichtbar). Die Kopfzeile färbt sich dann dunkler; **← Zurück zum Plan** führt zurück. Empfohlene Reihenfolge:
 
 > **Erst einmal nur ausprobieren?** Mit [Beispieldaten](#39-beispieldaten-zum-ausprobieren) ist der Plan in einem Klick gefüllt
 > und lässt sich danach genauso schnell wieder leeren.
@@ -220,14 +221,18 @@ Diese Werte am besten an die bisherigen Kürzel aus schichtplaner.de anpassen, d
 
 **Notizen:** Im Zell-Dialog unter *Neuer Eintrag* Text in „Freitext / Notiz“ eingeben – mit gewählter Art hängt der Text
 an diesem Dienst, mit „– nur Freitext –“ ist es eine eigene Notiz. In beiden Fällen zeigt die **gelbe Ecke** in der Zelle,
-dass es Text gibt (Text beim Darüberfahren); eine Notiz ganz ohne Dienst steht direkt in der Zelle.
+dass es Text gibt; beim Darüberfahren mit der Maus erscheint er sofort. Der Text selbst steht nicht in der Zelle, damit der Plan übersichtlich bleibt.
 
 **Mehrere Dienste an einem Tag:** Ein Mitarbeiter kann an einem Tag bis zu **3** Dienste bzw. An-/Abwesenheiten haben, z. B.
 IV-Dienst und Telefondienst (dieselbe Art nicht doppelt; Notizen zählen nicht mit). Dafür die Arten hier anlegen und im Kalender:
 
 - im Zell-Dialog unter *Neuer Eintrag* hinzufügen – an einem einzelnen Tag wird standardmäßig **zusätzlich** eingetragen,
   über einen Zeitraum (z. B. Urlaub) werden vorhandene Dienste ersetzt; beides lässt sich mit dem Häkchen umschalten, oder
-- mit dem Pinsel bei gesetztem Häkchen **„zusätzlich eintragen“** bzw. mit **Strg** (Mac: ⌘) beim Klicken.
+- mit dem Pinsel: Ist ein Feld schon belegt, fragt die App **Überschreiben** oder **Zusätzlich eintragen** (auf Wunsch „für diesen
+  Pinsel nicht mehr fragen“). Mit gedrückter **Strg**-Taste (Mac: ⌘) trägt der Pinsel ohne Rückfrage zusätzlich ein.
+
+**Löschen mit dem Radiergummi:** Gibt es im markierten Bereich verschiedene Einträge (z. B. F und Telefondienst oder eine Notiz),
+fragt die App, was entfernt werden soll – die übrigen bleiben stehen.
 
 Tage, die schon voll sind oder die Art bereits haben, werden dabei übersprungen (mit Hinweis).
 
@@ -295,8 +300,23 @@ Jeder Benutzer kann im Menü **Ansichten** die aktuelle Auswahl speichern (Ansic
 Der Kalender nutzt immer die volle Fensterbreite. Als **Zeitraum** gibt es *Monat*, 7/14 Tage, 4/6 Wochen und **Fensterbreite** –
 dann werden so viele Tage gezeigt, wie nebeneinander passen (auf einem 1920-px-Bildschirm etwa 50), ab Montag der aktuellen Woche.
 
-**Schriftgröße:** im Benutzermenü oben rechts mit **A−** / **A+** (90 % bis 175 %, Klick auf die Prozentzahl = 100 %). Die Einstellung
-gehört zum Benutzerkonto und gilt damit auf allen Geräten – auch, wenn sich mehrere Kollegen einen PC teilen.
+**Monat oder Jahr direkt wählen:** auf die Überschrift (z. B. „November 2026 ▾“) klicken – es öffnet sich eine Monats- bzw. Jahresauswahl.
+
+**Profil & Einstellungen** (oben rechts auf den eigenen Namen klicken), für jeden Benutzer:
+
+| Bereich | Inhalt |
+|---|---|
+| Konto | Name, Benutzername, verknüpfter Mitarbeiter; **Passwort ändern** |
+| Darstellung | **Automatisch** (wie das Gerät), **Hell** oder **Dunkel** |
+| Benachrichtigungen | Hinweis beim Start, wenn andere meine Einträge geändert haben (an/aus) |
+| Schriftgröße | 90 % bis 175 % |
+
+Darstellung und Schriftgröße gehören zum Benutzerkonto und gelten damit auf allen Geräten – auch, wenn sich mehrere Kollegen einen PC teilen.
+
+**Änderungen an meinem Plan:** Hat jemand anderes (z. B. die Teamleitung) Einträge eines Mitarbeiters geändert, sieht dieser beim
+nächsten Start einen Hinweis „… hat seit deinem letzten Besuch 3 Änderungen an deinem Plan vorgenommen“. Unter *Benutzermenü →
+📝 Änderungen an meinem Plan* steht jederzeit die vollständige Liste aller Änderungen an den eigenen Einträgen (wer, wann, was;
+Neues ist markiert). Voraussetzung: Das Benutzerkonto ist mit dem Mitarbeiter verknüpft.
 
 ### 3.7 Als App installieren (PWA)
 
@@ -334,6 +354,22 @@ Die Liste gilt für alle Abteilungen gemeinsam. Rosenmontag usw. jedes Jahr neu 
 
 > **Bundesland wechseln:** Die unveränderten gesetzlichen Feiertage werden in allen bereits eingerichteten Jahren durch die des
 > neuen Bundeslandes ersetzt. Eigene, geänderte und arbeitsfreie Tage bleiben erhalten.
+
+### 3.8a Schulferien
+
+*Verwaltung → Ferien*
+
+Schulferien erscheinen im Kalender als **türkiser Balken** über den Tagen, im Jahreskalender und in der Tagesübersicht.
+Sie sind nur ein Hinweis (z. B. für die Urlaubsplanung) und sperren nichts.
+
+- **Bundesland** oben wählen (Standard: das Bundesland der Feiertage).
+- **Aus Quelle laden …** holt die Ferien des gewählten Jahres von [openholidaysapi.org](https://www.openholidaysapi.org) und zeigt,
+  was fehlt, schon vorhanden ist oder abweicht. Ausgewählte Zeiträume werden übernommen; überschneidende ersetzt.
+  Abgefragt wird nur bei diesem Klick – dafür braucht der Server Internetzugang zu `openholidaysapi.org`
+  (hinter einem Proxy bei Node.js `NODE_USE_ENV_PROXY=1` und `HTTPS_PROXY` setzen).
+- **+ Zeitraum**, **Bearbeiten**, **Löschen** für eigene Anpassungen, z. B. bewegliche Ferientage.
+
+Die Ferien jedes Jahres einmal übernehmen, sobald sie feststehen (meist mehrere Jahre im Voraus veröffentlicht).
 
 ### 3.9 Beispieldaten zum Ausprobieren
 
@@ -413,7 +449,7 @@ docker compose up -d                 # wieder starten
 
 ```bash
 cd /opt/schichtplaner
-docker compose exec app node server/dist/cli.js backup /data/backups/vor-update.db   # Sicherheitskopie
+docker compose exec app node server/dist/cli.js backup /data/backups/manuell-$(date +%Y%m%d-%H%M%S).db   # Sicherheitskopie (oder in der App: Backups → Jetzt sichern)
 git pull
 docker compose up -d --build
 docker image prune -f                # alte Images aufräumen
@@ -445,45 +481,76 @@ docker compose pull --ignore-buildable && docker compose build --pull app && doc
 
 ### 4.3 Backups
 
-**Automatisch:** Die App sichert die Datenbank etwa eine Minute nach dem Start und danach alle 24 Stunden nach
-`/data/backups` im Docker-Volume. Aufbewahrt werden die letzten `BACKUP_KEEP` Sicherungen (Standard 14).
+*Benutzermenü → ⚙ Verwaltung → Backups* (nur Administratoren)
+
+Eine Sicherung ist eine vollständige Kopie der Datenbank: Plan, Mitarbeiter, Benutzer mit Rechten, Einstellungen und Protokoll.
+Sie entsteht im laufenden Betrieb und ist trotzdem konsistent – niemand muss sich abmelden.
+
+**Zeitplan** (Abschnitt *Automatische Sicherung*):
+
+| Einstellung | Möglichkeiten | Standard |
+|---|---|---|
+| Häufigkeit | Aus · Stündlich (zur gewählten Minute) · Täglich (Uhrzeit) · Wöchentlich (Wochentag + Uhrzeit) | täglich 02:30 Uhr |
+| Aufbewahren | Anzahl der automatischen Sicherungen, die behalten werden (ältere werden gelöscht) | 14 (bzw. `BACKUP_KEEP`) |
+| Zusätzlicher Speicherort | zweiter Ordner, in den jede Sicherung zusätzlich kopiert wird, z. B. ein eingebundenes NAS | leer |
+
+War der Server zum geplanten Zeitpunkt aus, wird die Sicherung kurz nach dem Start nachgeholt. Die Uhrzeit richtet sich nach `TZ`
+(Docker: `Europe/Berlin`).
+
+**Arten von Sicherungen** in der Liste:
+
+| Art | Entsteht durch | Wird automatisch gelöscht? |
+|---|---|---|
+| automatisch | Zeitplan | ja, nur die neuesten *Aufbewahren* bleiben |
+| von Hand | Knopf **Jetzt sichern** | nein |
+| vor Einspielen | automatisch, bevor eine Sicherung eingespielt wird | nein |
+| hochgeladen | **Sicherung hochladen …** (z. B. vom alten Server) | nein |
+
+Je Sicherung: **⬇** herunterladen, **↺ Einspielen**, **🗑** löschen.
+
+**Einspielen** setzt alle Daten auf den Stand der Sicherung zurück – auch Benutzer, Rechte und Einstellungen; was danach
+eingetragen wurde, ist weg. Deshalb legt die App vorher automatisch eine Sicherung „vor Einspielen“ an, mit der sich das
+Einspielen wieder rückgängig machen lässt. Angemeldete Benutzer bleiben angemeldet, offene Browser zeigen sofort den
+eingespielten Stand. Nicht zurückgesetzt werden der Zeitplan und die Liste der Sicherungen selbst. Sicherungen älterer
+Versionen lassen sich ebenfalls einspielen (neuere Felder bleiben dann leer bzw. auf dem Standard).
+
+**Hochladen:** Beim Hochladen prüft die App, ob die Datei eine unbeschädigte Schichtplaner-Datenbank ist. Danach steht sie in
+der Liste und kann eingespielt werden – so zieht der Schichtplaner auf einen neuen Server um.
+
+**Wichtig – Sicherungen vom Server wegbringen.** Liegen sie nur auf dem Server, helfen sie bei einem Serverausfall nicht. Möglichkeiten:
+
+- ab und zu eine Sicherung mit **⬇** herunterladen,
+- einen **zusätzlichen Speicherort** auf einem anderen Laufwerk/NAS einrichten. Unter Docker muss der Ordner dafür in den
+  Container eingebunden werden, in `docker-compose.yml` beim Dienst `app` unter `volumes`:
+
+  ```yaml
+      volumes:
+        - data:/data
+        - /mnt/nas/schichtplaner:/backup-extra     # Ordner auf dem Server : Ordner im Container
+  ```
+
+  Die App läuft im Container als Benutzer mit der ID 1000 – der Ordner muss für ihn beschreibbar sein
+  (`sudo chown 1000:1000 /mnt/nas/schichtplaner`). Nach `docker compose up -d` in der App als zusätzlichen Speicherort
+  `/backup-extra` eintragen. Schlägt das Kopieren fehl
+  (z. B. NAS nicht erreichbar), steht das oben auf der Backup-Seite; die Sicherung im Hauptordner ist trotzdem vorhanden.
+- oder per Cron abholen (`crontab -e`, täglich 3:30 Uhr):
+
+  ```cron
+  30 3 * * * cd /opt/schichtplaner && mkdir -p backups && docker compose cp app:/data/backups/. ./backups/ >/dev/null 2>&1
+  ```
+
+**Über die Kommandozeile** (z. B. wenn die App nicht mehr startet):
 
 ```bash
-docker compose exec app ls -lh /data/backups
-```
+docker compose exec app ls -lh /data/backups                                            # Sicherungen anzeigen
+docker compose exec app node server/dist/cli.js backup /data/backups/manuell-$(date +%Y%m%d-%H%M%S).db
 
-**Manuell** (im laufenden Betrieb möglich, die Kopie ist konsistent):
-
-```bash
-docker compose exec app node server/dist/cli.js backup /data/backups/manuell-$(date +%F).db
-```
-
-**Wichtig – Sicherungen vom Server wegkopieren.** Liegen die Backups nur auf dem Server, helfen sie bei einem Serverausfall nicht. Die
-Backups lassen sich auf den Server-Rechner kopieren und von dort z. B. per `rsync`/`scp` abholen:
-
-```bash
-mkdir -p backups
-docker compose cp app:/data/backups/. ./backups/
-# vom eigenen PC aus:
-scp -r benutzer@plan.example.de:/opt/schichtplaner/backups ./schichtplaner-backups
-```
-
-Optional per Cron automatisieren (`crontab -e`, täglich 3:30 Uhr):
-
-```cron
-30 3 * * * cd /opt/schichtplaner && mkdir -p backups && docker compose cp app:/data/backups/. ./backups/ >/dev/null 2>&1
-```
-
-**Wiederherstellen:**
-
-```bash
-docker compose stop app
+docker compose stop app                                                                  # Wiederherstellen offline
 docker compose run --rm --no-deps app node server/dist/cli.js restore /data/backups/<datei>.db
 docker compose start app
 ```
 
-Der bisherige Stand wird dabei vorsichtshalber als `/data/schichtplaner.db.vor-wiederherstellung.db` gesichert.
-Eine Sicherung vom eigenen PC zurückspielen: erst mit `docker compose cp ./datei.db app:/data/backups/` in den Container kopieren.
+Beim Wiederherstellen per Kommandozeile wird der bisherige Stand als `/data/schichtplaner.db.vor-wiederherstellung.db` gesichert.
 
 ### 4.4 Passwort vergessen / ausgesperrt
 
@@ -505,7 +572,7 @@ Nach zu vielen Fehlversuchen ist eine Anmeldung 5 Minuten gesperrt; `docker comp
 | Was | Wo |
 |---|---|
 | Datenbank | Docker-Volume `schichtplaner_data` → `/data/schichtplaner.db` im Container |
-| Automatische Backups | dasselbe Volume → `/data/backups/` |
+| Sicherungen | dasselbe Volume → `/data/backups/` (optional zusätzlich ein eigener Ordner, siehe [4.3](#43-backups)) |
 | HTTPS-Zertifikate | Docker-Volume `schichtplaner_caddy` |
 | Konfiguration | `/opt/schichtplaner/.env` |
 
@@ -881,8 +948,8 @@ ADMIN_PASSWORD=test1234
 | `SECURE_COOKIES` | Anmelde-Cookie nur über HTTPS senden; im Internet **immer `true`** | `false` (Docker: `true`) |
 | `TRUST_PROXY` | `X-Forwarded-For` vom vorgeschalteten Proxy übernehmen; `false`, wenn die App ohne Proxy direkt erreichbar ist | `true` |
 | `ADMIN_PASSWORD` | Passwort des ersten Benutzers `admin`, nur wenn noch kein Benutzer existiert | zufällig, steht im Log |
-| `BACKUP_DIR` | Verzeichnis für tägliche automatische Sicherungen; leer = keine | leer (Docker: `/data/backups`) |
-| `BACKUP_KEEP` | Anzahl aufbewahrter automatischer Sicherungen | `14` |
+| `BACKUP_DIR` | Ordner für Sicherungen (Zeitplan und Verwaltung unter *Verwaltung → Backups*) | Unterordner `backups` neben der Datenbank (Docker: `/data/backups`) |
+| `BACKUP_KEEP` | Vorgabe für „Aufbewahren“, solange in der App nichts eingestellt wurde | `14` |
 | `TZ` | Zeitzone für Logs und Zeitstempel der Sicherungsdateien | Systemzeit (Docker: `Europe/Berlin`) |
 
 ### 9.2 Zusätzliche Werte in `.env` (nur Docker Compose)
